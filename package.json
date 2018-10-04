@@ -1,6 +1,6 @@
 {
   "name": "ws-nats",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "A browser and NodeJS websocket client library for NATS",
   "main": "dist/ws-nats.cjs.js",
   "browser": "dist/ws-nats.umd.js",
@@ -12,8 +12,8 @@
     "url": "git+https://github.com/antonioaguilar/ws-nats.git"
   },
   "keywords": ["websocket", "ws", "nats", "browser", "nodejs", "NATS", "messaging", "pubsub"],
-  "author": "",
-  "license": "ISC",
+  "author": "Antonio Aguilar",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/antonioaguilar/ws-nats/issues"
   },
