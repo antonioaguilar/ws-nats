@@ -1,6 +1,6 @@
 {
   "name": "ws-nats",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A browser and NodeJS websocket client library for NATS",
   "main": "dist/ws-nats.cjs.js",
   "browser": "dist/ws-nats.umd.js",
