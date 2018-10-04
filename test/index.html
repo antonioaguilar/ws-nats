@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Websocket NATS client</title>
+</head>
+<body>
+<script src="../dist/ws-nats.umd.js"></script>
+<script>
+
+  var nats = NATS.connect({ url: 'ws://' + location.hostname + ':8080', json: true, name: 'ws-nats:browser:' + navigator.platform });
+
+  console.log('NATS library version:', window.NATS.version);
+
+  nats.subscribe('events.*', function(event) {
+    document.getElementById('count').innerHTML = 'Events: ' + event.count;
+    console.log(event);
+  });
+
+</script>
+</body>
+<h1>Websocket NATS client</h1>
+<h3 id="count"></h3>
+</html>
+

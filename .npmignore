@@ -1,0 +1,5 @@
+.idea/
+.vscode/
+lib/
+webpack.config.js
+package-lock.json
