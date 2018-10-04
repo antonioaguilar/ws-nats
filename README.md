@@ -13,9 +13,10 @@ npm install --save ws-nats
 var nats = NATS.connect({ url: 'ws://0.0.0.0:8080', json: true });
 
 nats.subscribe('events.*', function(event) {
-  document.getElementById('count').innerHTML = 'Events: ' + event.count;
   console.log(event);
 });
+
+nats.publish('events.123', { message: 'Hola' });
 ```
 
 > This library is compatible with all the API methods in [node-nats](https://github.com/nats-io/node-nats#basic-usage)
