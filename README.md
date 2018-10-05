@@ -1,4 +1,7 @@
 # ws-nats
+[![npm](https://img.shields.io/npm/v/ws-nats.svg)](https://www.npmjs.com/package/ws-nats)
+[![License MIT](https://img.shields.io/npm/l/ws-nats.svg)](http://opensource.org/licenses/MIT)
+
 A browser and NodeJS websocket client library for NATS
 
 ### Install
@@ -9,14 +12,100 @@ npm install --save ws-nats
 
 ### Usage
 
+Browser:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head></head>
+<body>
+  <script src="ws-nats.umd.js"></script>
+  <script>
+    var NATS = window.NATS;
+    
+    var nats = NATS.connect({ url: 'ws://0.0.0.0:8080', json: true });
+    
+    nats.publish('foo', 'Hello World!');
+  </script>
+</body>
+</html>
+```
+
+NodeJS:
 ```javascript
+var NATS = require('ws-nats');
+
 var nats = NATS.connect({ url: 'ws://0.0.0.0:8080', json: true });
 
-nats.subscribe('events.*', function(event) {
-  console.log(event);
+nats.publish('foo', 'Hello World!');
+``` 
+
+### Basic Example
+
+```javascript
+var NATS = require('ws-nats');
+
+var nats = NATS.connect({ url: 'ws://0.0.0.0:8080', json: true });
+
+// Simple Publisher
+nats.publish('foo', 'Hello World!');
+
+// Simple Subscriber
+nats.subscribe('foo', function(msg) {
+  console.log('Received a message: ' + msg);
 });
 
-nats.publish('events.123', { message: 'Hola' });
+// "*" matches any token, at any level of the subject.
+nats.subscribe('foo.*.baz', function(msg, reply, subject) {
+  console.log('Msg received on [' + subject + '] : ' + msg);
+});
+
+nats.subscribe('foo.bar.*', function(msg, reply, subject) {
+  console.log('Msg received on [' + subject + '] : ' + msg);
+});
+
+// Wildcard Subscriptions
+
+// ">" matches any length of the tail of a subject, and can only be
+// the last token E.g. 'foo.>' will match 'foo.bar', 'foo.bar.baz',
+// 'foo.foo.bar.bax.22'
+nats.subscribe('foo.>', function(msg, reply, subject) {
+  console.log('Msg received on [' + subject + '] : ' + msg);
+});
+
+
+// Unsubscribing
+var sid = nats.subscribe('foo', function(msg) {});
+nats.unsubscribe(sid);
+
+// Request Streams
+var sid = nats.request('request', function(response) {
+  console.log('Got a response in msg stream: ' + response);
+});
+
+// Request with Auto-Unsubscribe. Will unsubscribe after
+// the first response is received via {'max':1}
+nats.request('help', {}, {'max':1}, function(response) {
+  console.log('Got a response for help: ' + response);
+});
+
+// Request for single response with timeout.
+nats.requestOne('help', {}, {}, 1000, function(response) {
+  // `NATS` is the library.
+  if(response instanceof NATS.NatsError && response.code === NATS.REQ_TIMEOUT) {
+    console.log('Request for help timed out.');
+    return;
+  }
+  console.log('Got a response for help: ' + response);
+});
+
+// Replies
+nats.subscribe('help', function(request, replyTo) {
+  nats.publish(replyTo, 'I can help!');
+});
+
+// Close connection
+nats.close();
 ```
 
 > This library is compatible with all the API methods in [node-nats](https://github.com/nats-io/node-nats#basic-usage)
@@ -25,7 +114,7 @@ nats.publish('events.123', { message: 'Hola' });
 
 To test `ws-nats`, you need to connect to a [NATS server](https://github.com/nats-io/gnatsd) using a Websocket-to-TCP relay such as [nats-relay](https://hub.docker.com/r/aaguilar/nats-relay/) or [ws-tcp-relay](https://github.com/isobit/ws-tcp-relay).
 
-You can use Docker to run the `gnatsd` server and the `Websockets-to-TCP` relay:
+You can use Docker to run the `gnatsd` server and the Websockets to TCP relay:
 
 ```
 # launch the gnatsd server
