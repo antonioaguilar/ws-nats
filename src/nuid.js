@@ -20,7 +20,7 @@
  * Module Dependencies
  */
 
-var crypto = require('./crypto');
+var crypto = require('crypto');
 
 /**
  * Constants

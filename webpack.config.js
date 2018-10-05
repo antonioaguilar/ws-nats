@@ -1,7 +1,9 @@
+var UglifyJSPlugin = require('uglifyjs-webpack-plugin');
+
 var browserConfig = {
 
   entry: {
-    NATS: __dirname + '/lib/nats.js'
+    NATS: __dirname + '/src/nats.js'
   },
 
   target: 'web',
@@ -13,6 +15,20 @@ var browserConfig = {
     path: __dirname + '/dist'
   },
 
+  optimization: {
+    minimizer: [
+      new UglifyJSPlugin({
+        sourceMap: true,
+        uglifyOptions: {
+          output: { comments: false },
+          compress: {
+            inline: false
+          }
+        }
+      })
+    ]
+  },
+
   plugins: []
 
 };
@@ -20,7 +36,7 @@ var browserConfig = {
 var nodejsConfig = {
 
   entry: {
-    NATS: __dirname + '/lib/nats.js'
+    NATS: __dirname + '/src/nats.js'
   },
 
   target: 'node',

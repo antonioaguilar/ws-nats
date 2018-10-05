@@ -1,17 +1,26 @@
 {
   "name": "ws-nats",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "A browser and NodeJS websocket client library for NATS",
   "main": "dist/ws-nats.cjs.js",
   "browser": "dist/ws-nats.umd.js",
   "scripts": {
-    "build": "rimraf dist && webpack --config webpack.config.js --mode=development --display-modules"
+    "build": "rimraf dist && webpack --config webpack.config.js --mode=production --display-modules"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/antonioaguilar/ws-nats.git"
   },
-  "keywords": ["websocket", "ws", "nats", "browser", "nodejs", "NATS", "messaging", "pubsub"],
+  "keywords": [
+    "websocket",
+    "ws",
+    "nats",
+    "browser",
+    "nodejs",
+    "NATS",
+    "messaging",
+    "pubsub"
+  ],
   "author": "Antonio Aguilar",
   "license": "MIT",
   "bugs": {
@@ -21,7 +30,8 @@
   "devDependencies": {
     "rimraf": "latest",
     "webpack": "latest",
-    "webpack-cli": "latest"
+    "webpack-cli": "latest",
+    "uglifyjs-webpack-plugin": "latest"
   },
   "dependencies": {
     "websocket": "latest"
