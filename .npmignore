@@ -1,6 +1,6 @@
 .idea/
 .vscode/
-lib/
+src/
 test/
 webpack.config.js
 package-lock.json
