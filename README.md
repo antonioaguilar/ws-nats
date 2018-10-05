@@ -120,7 +120,7 @@ You can use Docker to run the `gnatsd` server and the Websockets to TCP relay:
 # launch the gnatsd server
 docker run -it --name=nats --rm -d -p 4222:4222 -p 8222:8222 nats -D -m 8222
 
-# launch the relay
+# launch the relay (assumes we are using Linux!)
 docker run -it --name=relay --rm -d -p 8080:8080 aaguilar/nats-relay -p 8080 $(hostname -i):4222
 
 # then configure ws-nats to connect to the relay
@@ -138,3 +138,13 @@ Tested in the following browsers versions:
 * Safari 9+
 * Mobile Safari 11+
 * Opera 46+
+
+### Limitations
+* Internet Explorer 9/10 are not supported because it doesn't support the [Crypto API](https://caniuse.com/#feat=getrandomvalues)
+* The UMD bundle produced by Webpack is quite large at the moment (e.g. ~ 338 KiB), please consider this when including the library in your project
+
+
+### Acknowledgements
+
+This library is heavily inspired by [websocket-nats](https://github.com/isobit/websocket-nats) and re-uses the sames API methods from the original [node-nats](https://github.com/nats-io/node-nats#basic-usage) library. 
+The only difference is that `ws-nats` can run in both the browser and NodeJS (via a W3C compliant WebSocket library). 
