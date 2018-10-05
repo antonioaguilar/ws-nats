@@ -43,7 +43,6 @@ var nodejsConfig = {
 
   output: {
     filename: 'ws-nats.cjs.js',
-    library: 'NATS',
     libraryTarget: 'commonjs',
     path: __dirname + '/dist'
   },
