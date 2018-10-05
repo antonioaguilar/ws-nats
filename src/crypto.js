@@ -2,6 +2,7 @@ var env = require('./env');
 
 if (env.isNode()) {
   module.exports = require('crypto');
+  //exports.randomBytes = require('crypto').randomBytes;
 }
 else {
   var crypto = window.crypto || window.msCrypto;

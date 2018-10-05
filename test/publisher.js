@@ -27,4 +27,13 @@ var timer = setInterval(function() {
     process.exit();
   }
 
-}, 10);
+}, 250);
+
+nats.subscribe('HELLO', function(request, replyTo) {
+  console.log('REQUEST:', JSON.stringify(request));
+  nats.publish(replyTo, {
+    request_payload: request,
+    request_timestamp: new Date().toISOString(),
+    request_id: replyTo
+  });
+});
