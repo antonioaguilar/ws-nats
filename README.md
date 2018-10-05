@@ -103,9 +103,6 @@ nats.requestOne('help', {}, {}, 1000, function(response) {
 nats.subscribe('help', function(request, replyTo) {
   nats.publish(replyTo, 'I can help!');
 });
-
-// Close connection
-nats.close();
 ```
 
 > This library is compatible with all the API methods in [node-nats](https://github.com/nats-io/node-nats#basic-usage)
