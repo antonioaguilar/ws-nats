@@ -1,4 +1,4 @@
-var NATS = require('../dist/ws-nats.cjs').NATS;
+var NATS = require('../dist/ws-nats.cjs');
 
 var nats = NATS.connect({ url: 'ws://0.0.0.0:8080', json: true, name: 'ws-nats:nodejs' });
 
