@@ -25,7 +25,7 @@ Browser:
     
     var nats = NATS.connect({ url: 'ws://0.0.0.0:8080', json: true });
     
-    nats.publish('foo', 'Hello World!');
+    nats.publish('foo', { message: 'Hello World!' });
   </script>
 </body>
 </html>
@@ -37,7 +37,7 @@ var NATS = require('ws-nats');
 
 var nats = NATS.connect({ url: 'ws://0.0.0.0:8080', json: true });
 
-nats.publish('foo', 'Hello World!');
+nats.publish('foo', { message: 'Hello World!' });
 ``` 
 
 ### Basic Example
@@ -48,7 +48,7 @@ var NATS = require('ws-nats');
 var nats = NATS.connect({ url: 'ws://0.0.0.0:8080', json: true });
 
 // Simple Publisher
-nats.publish('foo', 'Hello World!');
+nats.publish('foo', { message: 'Hello World!' });
 
 // Simple Subscriber
 nats.subscribe('foo', function(msg) {
@@ -64,7 +64,7 @@ nats.subscribe('foo.bar.*', function(msg, reply, subject) {
   console.log('Msg received on [' + subject + '] : ' + msg);
 });
 
-// Wildcard Subscriptions
+// Using Wildcard Subscriptions
 
 // ">" matches any length of the tail of a subject, and can only be
 // the last token E.g. 'foo.>' will match 'foo.bar', 'foo.bar.baz',
