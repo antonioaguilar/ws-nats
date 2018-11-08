@@ -12,7 +12,8 @@ var browserConfig = {
     filename: 'ws-nats.umd.js',
     library: 'NATS',
     libraryTarget: 'umd',
-    path: __dirname + '/dist'
+    path: __dirname + '/dist',
+    globalObject: 'this'
   },
 
   optimization: {
@@ -29,7 +30,9 @@ var browserConfig = {
     ]
   },
 
-  plugins: []
+  plugins: [
+    // new webpack.HotModuleReplacementPlugin()
+  ]
 
 };
 

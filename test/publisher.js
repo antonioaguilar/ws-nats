@@ -1,6 +1,6 @@
 var NATS = require('../dist/ws-nats.cjs');
 
-var nats = NATS.connect({ url: 'ws://0.0.0.0:8080', json: true, name: 'ws-nats:nodejs' });
+var nats = NATS.connect({ url: 'ws://relay.u50.fluxmq.com', json: true, name: 'ws-nats:nodejs' });
 
 console.log('NATS library version:', NATS.version);
 
@@ -27,7 +27,7 @@ var timer = setInterval(function() {
     process.exit();
   }
 
-}, 250);
+}, 1000);
 
 nats.subscribe('HELLO', function(request, replyTo) {
   console.log('REQUEST:', JSON.stringify(request));
