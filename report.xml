@@ -1,0 +1,81 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<dfxml xmloutputversion='1.0'>
+  <metadata 
+  xmlns='http://afflib.org/tcpflow/' 
+  xmlns:xsi='http://www.w3.org/2001/XMLSchema-instance' 
+  xmlns:dc='http://purl.org/dc/elements/1.1/'>
+    <dc:type>Feature Extraction</dc:type>
+  </metadata>
+  <creator version='1.0'>
+    <program>TCPFLOW</program>
+    <version>1.5.0</version>
+    <build_environment>
+      <compiler>4.2.1 (4.2.1 Compatible Apple LLVM 9.0.0 (clang-900.0.39.2))</compiler>
+      <CPPFLAGS>-D_THREAD_SAFE -pthread -I/usr/local/include -I/usr/local/include  -DUTC_OFFSET=+0000 </CPPFLAGS>
+      <CFLAGS>-g   -D_THREAD_SAFE -pthread -g -O3 -MD -Wpointer-arith -Wmissing-declarations -Wmissing-prototypes -Wshadow -Wwrite-strings -Wcast-align -Waggregate-return -Wbad-function-cast -Wcast-qual -Wundef -Wredundant-decls -Wdisabled-optimization -Wfloat-equal -Wmultichar -Wc++-compat -Wmissing-noreturn -Wall -Wstrict-prototypes -MD -D_FORTIFY_SOURCE=2 -Wpointer-arith -Wmissing-declarations -Wmissing-prototypes -Wshadow -Wwrite-strings -Wcast-align -Waggregate-return -Wbad-function-cast -Wcast-qual -Wundef -Wredundant-decls -Wdisabled-optimization -Wfloat-equal -Wmultichar -Wc++-compat -Wmissing-noreturn -Wall -Wstrict-prototypes</CFLAGS>
+      <CXXFLAGS>-g -D_THREAD_SAFE -pthread -g -O3 -Wall -MD -D_FORTIFY_SOURCE=2 -Wpointer-arith -Wshadow -Wwrite-strings -Wcast-align -Wredundant-decls -Wdisabled-optimization -Wfloat-equal -Wmultichar -Wmissing-noreturn -Woverloaded-virtual -Wsign-promo -funit-at-a-time -Weffc++ -std=c++11 -Wall -MD -D_FORTIFY_SOURCE=2 -Wpointer-arith -Wshadow -Wwrite-strings -Wcast-align -Wredundant-decls -Wdisabled-optimization -Wfloat-equal -Wmultichar -Wmissing-noreturn -Woverloaded-virtual -Wsign-promo -funit-at-a-time -Weffc++ </CXXFLAGS>
+      <LDFLAGS>-L/usr/local/lib -L/usr/local/lib </LDFLAGS>
+      <LIBS>-lpython2.7 -lpython2.7 -lpcap -lbz2 -lexpat  -lsqlite3 -lssl -lcrypto -lssl -lcrypto -ldl -lz </LIBS>
+      <compilation_date>2018-09-26T11:36:54</compilation_date>
+      <library name="boost" version="106700"/>
+      <library name="sqlite" version="3.16.0" source_id="2016-11-04 19:09:39 0e5ffd9123d6d2d2b8f3701e8a73cc98a3a7ff5f"/>
+    </build_environment>
+    <execution_environment>
+      <os_sysname>Darwin</os_sysname>
+      <os_release>16.7.0</os_release>
+      <os_version>Darwin Kernel Version 16.7.0: Sun Oct 28 22:30:19 PDT 2018; root:xnu-3789.73.27~1/RELEASE_X86_64</os_version>
+      <host>mbp.local</host>
+      <arch>x86_64</arch>
+      <command_line>tcpflow -i any -CD -g port 9443</command_line>
+      <uid>0</uid>
+      <username>root</username>
+      <start_time>2019-02-14T23:32:24Z</start_time>
+    </execution_environment>
+  </creator>
+  <configuration>
+  </configuration>
+  <tdelta>0</tdelta>
+  <configuration>
+    <fileobject>
+      <filesize>1286</filesize>
+      <tcpflow startime='2019-02-14T23:32:32.773899Z' endtime='2019-02-14T23:32:32.792482Z' mac_daddr='45:00:00:40:05:50' mac_saddr='40:00:40:06:00:00' family='2' src_ipn='127.0.0.1' dst_ipn='127.0.0.1' srcport='50647' dstport='9443' packets='13' len='1974' />
+    </fileobject>
+    <fileobject>
+      <filesize>1286</filesize>
+      <tcpflow startime='2019-02-14T23:32:32.773965Z' endtime='2019-02-14T23:32:32.793396Z' mac_daddr='45:00:00:40:97:4a' mac_saddr='40:00:40:06:00:00' family='2' src_ipn='127.0.0.1' dst_ipn='127.0.0.1' srcport='50648' dstport='9443' packets='13' len='1974' />
+    </fileobject>
+    <fileobject>
+      <filesize>1514190</filesize>
+      <tcpflow startime='2019-02-14T23:32:32.792651Z' endtime='2019-02-14T23:35:21.700912Z' mac_daddr='45:00:00:40:5d:23' mac_saddr='40:00:40:06:00:00' family='2' src_ipn='127.0.0.1' dst_ipn='127.0.0.1' srcport='9443' dstport='50649' packets='143' len='1521650' />
+    </fileobject>
+    <fileobject>
+      <filesize>3112</filesize>
+      <tcpflow startime='2019-02-14T23:32:32.792588Z' endtime='2019-02-14T23:35:21.700879Z' mac_daddr='45:00:00:40:a3:1a' mac_saddr='40:00:40:06:00:00' family='2' src_ipn='127.0.0.1' dst_ipn='127.0.0.1' srcport='50649' dstport='9443' packets='106' len='8576' />
+    </fileobject>
+    <fileobject>
+      <filesize>5422</filesize>
+      <tcpflow startime='2019-02-14T23:32:32.773986Z' endtime='2019-02-14T23:32:32.793374Z' mac_daddr='45:00:00:40:f7:f2' mac_saddr='40:00:40:06:00:00' family='2' src_ipn='127.0.0.1' dst_ipn='127.0.0.1' srcport='9443' dstport='50648' packets='14' len='6174' />
+    </fileobject>
+    <fileobject>
+      <filesize>5422</filesize>
+      <tcpflow startime='2019-02-14T23:32:32.773954Z' endtime='2019-02-14T23:32:32.792463Z' mac_daddr='45:00:00:40:a3:08' mac_saddr='40:00:40:06:00:00' family='2' src_ipn='127.0.0.1' dst_ipn='127.0.0.1' srcport='9443' dstport='50647' packets='14' len='6174' />
+    </fileobject>
+  </configuration>
+  <summary />
+  <open_fds_at_end>0</open_fds_at_end>
+  <max_open_flows>0</max_open_flows>
+  <total_flows>6</total_flows>
+  <flow_map_size>4</flow_map_size>
+  <total_packets>303</total_packets>
+  <rusage>
+    <utime>0.333905</utime>
+    <stime>0.091065</stime>
+    <maxrss>4083712</maxrss>
+    <minflt>1101</minflt>
+    <majflt>185</majflt>
+    <nswap>0</nswap>
+    <inblock>0</inblock>
+    <oublock>4</oublock>
+    <clocktime>805.344588</clocktime>
+  </rusage>
+</dfxml>

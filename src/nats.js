@@ -889,12 +889,14 @@ Client.prototype.processInbound = function() {
                                 }
                             }
                             // if we have a stream, this is from an old connection, reap it
-                            if (client.stream) {
-                                client.stream.removeAllListeners();
-                            }
-                            client.stream = tls.connect(tlsOpts, function() {
-                                client.flushPending();
-                            });
+                            // if (client.stream) {
+                            //     client.stream.removeAllListeners();
+                            //     client.stream.sock.close();
+                            // }
+                            // Object.assign(tlsOpts, client.options);
+                            // client.stream = tls.connect(tlsOpts, function() {
+                            //     client.flushPending();
+                            // });
                             client.setupHandlers();
                         }
 

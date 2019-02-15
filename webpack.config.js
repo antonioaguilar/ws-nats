@@ -1,3 +1,4 @@
+var webpack = require('webpack');
 var UglifyJSPlugin = require('uglifyjs-webpack-plugin');
 
 var browserConfig = {
@@ -30,8 +31,11 @@ var browserConfig = {
     ]
   },
 
+  devtool: false,
+
   plugins: [
     // new webpack.HotModuleReplacementPlugin()
+    new webpack.SourceMapDevToolPlugin({})
   ]
 
 };
@@ -54,4 +58,5 @@ var nodejsConfig = {
 
 };
 
-module.exports = [nodejsConfig, browserConfig];
+// module.exports = [nodejsConfig, browserConfig];
+module.exports = [browserConfig];
