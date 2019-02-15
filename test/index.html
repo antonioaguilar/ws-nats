@@ -8,25 +8,38 @@
 <script src="../dist/ws-nats.umd.js"></script>
 <script>
 
-  var nats = NATS.connect({ url: 'ws://' + location.hostname + ':8080', json: true });
+  var cert = '-----BEGIN CERTIFICATE-----\nMIIG1jCCBL6gAwIBAgIJAMyEyAyMy0ncMA0GCSqGSIb3DQEBCwUAMIGiMQswCQYD\nVQQGEwJJRTETMBEGA1UECBMKQ28uIEdhbHdheTEPMA0GA1UEBxMGR2Fsd2F5MRQw\nEgYDVQQKEwtOQVRTLmlvIEx0ZDElMCMGA1UECxMcRGlzdHJpYnV0ZWQgU3lzdGVt\ncyBSZXNlYXJjaDESMBAGA1UEAxMJbG9jYWxob3N0MRwwGgYJKoZIhvcNAQkBFg1p\nbmZvQGluZm8uY29tMB4XDTE4MTAzMTEzNTU1OVoXDTI4MTAyODEzNTU1OVowgaIx\nCzAJBgNVBAYTAklFMRMwEQYDVQQIEwpDby4gR2Fsd2F5MQ8wDQYDVQQHEwZHYWx3\nYXkxFDASBgNVBAoTC05BVFMuaW8gTHRkMSUwIwYDVQQLExxEaXN0cmlidXRlZCBT\neXN0ZW1zIFJlc2VhcmNoMRIwEAYDVQQDEwlsb2NhbGhvc3QxHDAaBgkqhkiG9w0B\nCQEWDWluZm9AaW5mby5jb20wggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoIC\nAQDFADXGvGYwybawo/gWlRI9xrCWmvAlDXf4Z3VM36j65wfpLyrxN0tb+9o0XvCV\n4hI3vr2hA/dE3WoIkHxnTKzIVy9EkohgHHVsiukxlYEZdoeu4K5OCrYS8JgTlFmU\nuw9vMF4MELXUwgwA9BsUnmQV6I53NjW23z1CfKHrtQ7EhlAyTpLW6IeI0M/m5Ebd\nQSfeP2cA8x2k/KzDKN4hyEhNx7NpJ4UTglPYDQ+ZrRUrh0f6I6Xrk7InjB9bzNHb\nnutZ2zpSrAlr9OSsGtwlOMXcMtkwbxxWd8xcKGerFxZwpjWP4u2GfdI/qECZ2TV0\n3jZJlSLv7Z9JCyQbqUDGwQ+w/LBfqubAmhxj/Jb3FZv7sNVDJD5mfzv7IXcW4cc8\no+hcvWdbtH1skFbvnkZi+lw8OZvXeKkJ7z+cHR9fICxYCLXAvPPwGo95LrfeTJ+f\nDbMBu9PJQBf/RecQxX1BSKJe3AEgnIZAZk55YJI7j6nB2hqA3l2xop4OaFkmpNVz\ni2P/1uOhLPHOPZqLDcHEkg1lG1VTAqHZwhLP+S6yIUx3s+m9erE65rdENPj/htMF\nDgxXSajnGZ4SAs3J4T9sWbCTc4aYbyJxlRXufUr2+agy9LglBaPQJut9yrm0wBpg\n+FcUcBzaWjXEteV30b2EouBsz0DaXQxdlagmaEYLIyaPowIDAQABo4IBCzCCAQcw\nHQYDVR0OBBYEFG9fHh95IgqzuSr1yY7EWpM+T1nBMIHXBgNVHSMEgc8wgcyAFG9f\nHh95IgqzuSr1yY7EWpM+T1nBoYGopIGlMIGiMQswCQYDVQQGEwJJRTETMBEGA1UE\nCBMKQ28uIEdhbHdheTEPMA0GA1UEBxMGR2Fsd2F5MRQwEgYDVQQKEwtOQVRTLmlv\nIEx0ZDElMCMGA1UECxMcRGlzdHJpYnV0ZWQgU3lzdGVtcyBSZXNlYXJjaDESMBAG\nA1UEAxMJbG9jYWxob3N0MRwwGgYJKoZIhvcNAQkBFg1pbmZvQGluZm8uY29tggkA\nzITIDIzLSdwwDAYDVR0TBAUwAwEB/zANBgkqhkiG9w0BAQsFAAOCAgEAnPTcFBFh\n6wqMcfxc6vY3G18RdfW6MdAF2+bDPlmAUdsgwy/4zS/U+Gjv0oyoHvGyxDv/A/dc\neRCn6SN9/O1ajg+Knr2/2jFFRBFeP0Z79TKIyfV4xIZB2zY479nBxU6Hky+6fBJk\n9XXybbeBGDO3abQMK0pLsUst9LGgt/lKTS8a4f+Ht492heVcQF1faAvwppburOfj\nikRksqekCLXDvcZHdsaPlHcSlzZ8rNRPmgyISH1nIJDLo5aOYOhLwWaZU9p9OJ2g\naaydzZhkcheCPaMdTrihylUgnselxdbh/M8jAG6o8k6aJFWhq31+lMJknl6hWUO4\nyQ0Hv1aWCSHx5ilHaXNHsq6gaoT8k6A/1E/628EHjaOyKxANkGARn0OWACpro2fl\nt1cJkmlJXwlX4EIPgmorvuB7CNXwp8ufpcZVpfdE740Tct67eJfPEWJl/tCsAAdC\nRv8Jl44JudicEE//6pPKxIZ6TgvE+BffezYfpxLa7hgzuBxUr03Z6uh50kuQdaxj\n+RLYMBO3JBPK1cT9FcOtkj/A3S95zYTZNE0qDofgP8nMf7ZpiyahJysfv1wGhhHf\nIuf3AgXxd46U57GCPyU15ZsWSB7IRMJH04NyToq6ZnWWHh56SYjRRssUemA6kdVy\nHdrrR8I5K8FrPamZqdvURVhGpHFVTQVTDUM=\n-----END CERTIFICATE-----\n';
+  var key = '-----BEGIN RSA PRIVATE KEY-----\n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\n-----END RSA PRIVATE KEY-----\n';
 
-  console.log('NATS library version:', window.NATS.version);
-
-  nats.subscribe('events.*', function(event) {
-    document.getElementById('events').innerHTML = 'EVENT: ' + JSON.stringify(event, null, 0);
-    console.log(event);
+  var nc = NATS.connect({
+    url: 'ws://0.0.0.0:8888/events/websocket',
+    verbose: true,
+    json: true,
+    name: 'web-client',
+    // token: 'GX5YF3L7DL90SP7PLFOUP9',
+    user: 'joe',
+    pass: 'GX5YF3L7DL90SP7PLFOUP9',
+    // tls: {
+    //   key: key,
+    //   cert: cert,
+    //   rejectUnauthorized: false
+    // }
   });
 
-  function makeRequest () {
-    var requestObject = {
-      message: 'Hello, how are you?',
-      timestamp: new Date().toISOString()
-    };
-    nats.request('HELLO', requestObject, {}, function(response) {
-      document.getElementById('request').innerHTML = 'REQUEST: ' + JSON.stringify(requestObject, null, 0);
-      document.getElementById('response').innerHTML = 'RESPONSE: ' + JSON.stringify(response, null, 0);
+  nc.on('connect', () => {
+    console.log('Subscriber connected to NATS');
+
+    nc.subscribe('dashboard.*', (e) => {
+      console.log('Received message from subscriber:', JSON.stringify(e, null, 0));
     });
-  }
+
+    // setInterval( ()=> {
+    //   var subject = `dashboard.${Date.now()}`;
+    //   console.log(`Publishing to subject: ${subject}`);
+    //   nc.publish(subject, JSON.stringify({ timestamp: new Date().toISOString() }, null, 0));
+    // }, 1000);
+
+  });  
 
 </script>
 </body>

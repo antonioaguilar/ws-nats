@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Websocket NATS client</title>
+</head>
+<body>
+<script src="../dist/ws-nats.umd.js"></script>
+<script>
+
+  var nats = NATS.connect({ url: 'wss://' + location.hostname + ':8080', json: true });
+
+  console.log('NATS library version:', window.NATS.version);
+
+  nats.subscribe('events.*', function(event) {
+    document.getElementById('events').innerHTML = 'EVENT: ' + JSON.stringify(event, null, 0);
+    console.log(event);
+  });
+
+  function makeRequest () {
+    var requestObject = {
+      message: 'Hello, how are you?',
+      timestamp: new Date().toISOString()
+    };
+    nats.request('HELLO', requestObject, {}, function(response) {
+      document.getElementById('request').innerHTML = 'REQUEST: ' + JSON.stringify(requestObject, null, 0);
+      document.getElementById('response').innerHTML = 'RESPONSE: ' + JSON.stringify(response, null, 0);
+    });
+  }
+
+</script>
+</body>
+<h1>Websocket NATS client</h1>
+<p id="events"></p>
+<hr>
+<button onclick="makeRequest()">MAKE REQUEST</button>
+<p id="request"></p>
+<p id="response"></p>
+</html>
+
