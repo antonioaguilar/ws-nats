@@ -47,12 +47,9 @@ WebSocketProxy.prototype.resume = function() { };
 // replace: this.stream = net.createConnection(this.url.port, this.url.hostname);
 // with: this.stream = net.createConnection(this.url);
 
-// IMPORTANT: if NOT using NodeJS 10.x
-// comment out the following line: this.stream.setNoDelay(true);
-
 exports.createConnection = function(url) {
   // The url is rebuilt to avoid including the auth credentials.
-  return new WebSocketProxy(url.format({
+  var connection = new WebSocketProxy(url.format({
     protocol: url.protocol,
     slashes: url.slashes,
     host: url.host,
@@ -64,4 +61,6 @@ exports.createConnection = function(url) {
     query: url.query,
     hash: url.hash
   }));
+  connection.setNoDelay = function () {};
+  return connection;
 };
