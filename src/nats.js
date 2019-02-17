@@ -19,17 +19,19 @@
 /**
  * Module Dependencies
  */
-var net    = require('net'),
-    tls    = require('tls'),
-    url    = require('url'),
-    util   = require('util'),
+var net = require('net'),
+    tls = require('tls'),
+    url = require('url'),
+    util = require('util'),
     events = require('events'),
-    nuid   = require('nuid');
+    nuid = require('nuid'),
+    nkeys = require('ts-nkeys'),
+    fs = require('fs');
 
 /**
  * Constants
  */
-var VERSION = '1.0.1',
+var VERSION = '1.2.2',
 
     DEFAULT_PORT = 4222,
     DEFAULT_PRE = 'nats://localhost:',
@@ -50,8 +52,6 @@ var VERSION = '1.0.1',
     DEFAULT_MAX_PING_OUT = 2,
 
     // Protocol
-    //CONTROL_LINE = /^(.*)\r\n/, // TODO: remove / never used
-
     MSG = /^MSG\s+([^\s\r\n]+)\s+([^\s\r\n]+)\s+(([^\s\r\n]+)[^\S\r\n]+)?(\d+)\r\n/i,
     OK = /^\+OK\s*\r\n/i,
     ERR = /^-ERR\s+('.+')?\r\n/i,
@@ -59,6 +59,7 @@ var VERSION = '1.0.1',
     PONG = /^PONG\r\n/i,
     INFO = /^INFO\s+([^\r\n]+)\r\n/i,
     SUBRE = /^SUB\s+([^\r\n]+)\r\n/i,
+    CREDS = /\s*(?:(?:[-]{3,}[^\n]*[-]{3,}\n)(.+)(?:\n\s*[-]{3,}[^\n]*[-]{3,}\n))/i,
 
     CR_LF = '\r\n',
     CR_LF_LEN = CR_LF.length,
@@ -66,7 +67,6 @@ var VERSION = '1.0.1',
     SPC = ' ',
 
     // Protocol
-    //PUB     = 'PUB', // TODO: remove / never used
     SUB = 'SUB',
     UNSUB = 'UNSUB',
     CONNECT = 'CONNECT',
@@ -102,11 +102,21 @@ var VERSION = '1.0.1',
     REQ_TIMEOUT_MSG_PREFIX = 'The request timed out for subscription id: ',
     SECURE_CONN_REQ = 'SECURE_CONN_REQ',
     SECURE_CONN_REQ_MSG = 'Server requires a secure connection.',
-    STALE_CONNECTION_ERR = "stale connection",
-
-    // Pedantic Mode support
-    //Q_SUB = /^([^\.\*>\s]+|>$|\*)(\.([^\.\*>\s]+|>$|\*))*$/, // TODO: remove / never used
-    //Q_SUB_NO_WC = /^([^\.\*>\s]+)(\.([^\.\*>\s]+))*$/, // TODO: remove / never used
+    STALE_CONNECTION_ERR = 'stale connection',
+    SIGNATURE_REQUIRED = 'SIG_REQ',
+    SIGNATURE_REQUIRED_MSG = 'Server requires an Nkey signature.',
+    SIGCB_NOTFUNC = 'SIG_NOT_FUNC',
+    SIGCB_NOTFUNC_MSG = 'Signature callback is not a function.',
+    NKEY_OR_JWT_REQ = 'NKEY_OR_JWT_REQ',
+    NKEY_OR_JWT_REQ_MSG = 'An Nkey or User JWT callback needs to be defined.',
+    BAD_CREDS = 'BAD_CREDENTIALS',
+    BAD_CREDS_MSG = 'Bad user credentials',
+    NO_SEED_IN_CREDS = 'NO_SEED_IN_CREDS',
+    NO_SEED_IN_CREDS_MSG = 'Can not locate signing key in credentials',
+    NO_USER_JWT_IN_CREDS = 'NO_USER_JWT_IN_CREDS',
+    NO_USER_JWT_IN_CREDS_MSG = 'Can not locate user jwt in credentials.',
+    BAD_OPTIONS = 'BAD_OPTIONS',
+    BAD_OPTIONS_MSG = 'Options should be an object as second paramater.',
 
     FLUSH_THRESHOLD = 65536;
 
@@ -178,11 +188,24 @@ function Client(opts) {
  * Argument can be a url, or an object with a 'url'
  * property and additional options.
  *
- * @params {Mixed} [opts]
- *
+ * @params {Mixed} [url] - Url, port, or options object
+ * @params {Object} [opts] - Options
  * @api public
  */
-exports.connect = function(opts) {
+exports.connect = function(url, opts) {
+    // If we receive one parameter, parser will
+    // figure out intent. If we provided opts, then
+    // first parameter should be url, and second an
+    // options object.
+    if (opts !== undefined) {
+        if ('object' !== typeof opts) {
+            this.emit('error', new NatsError(BAD_OPTIONS_MSG, BAD_OPTIONS));
+            return;
+        }
+        opts.url = sanitizeUrl(url);
+    } else {
+        opts = url;
+    }
     return new Client(opts);
 };
 
@@ -238,12 +261,13 @@ Client.prototype.parseOptions = function(opts) {
         useOldRequestStyle: false
     };
 
+
     if (undefined === opts) {
         options.url = DEFAULT_URI;
     } else if ('number' === typeof opts) {
         options.url = DEFAULT_PRE + opts;
     } else if ('string' === typeof opts) {
-        options.url = opts;
+        options.url = sanitizeUrl(opts);
     } else if ('object' === typeof opts) {
         if (opts.port !== undefined) {
             options.url = DEFAULT_PRE + opts.port;
@@ -277,6 +301,18 @@ Client.prototype.parseOptions = function(opts) {
         this.assignOption(opts, 'pingInterval');
         this.assignOption(opts, 'maxPingOut');
         this.assignOption(opts, 'useOldRequestStyle');
+        this.assignOption(opts, 'sigCB', 'sig');
+        this.assignOption(opts, 'sigcb', 'sig');
+        this.assignOption(opts, 'sigCallback', 'sig');
+        this.assignOption(opts, 'nkey', 'nkey');
+        this.assignOption(opts, 'nkeys', 'nkey');
+        this.assignOption(opts, 'userjwt', 'userjwt');
+        this.assignOption(opts, 'jwt', 'userjwt');
+        this.assignOption(opts, 'JWT', 'userjwt');
+        this.assignOption(opts, 'userJWT', 'userjwt');
+        this.assignOption(opts, 'usercreds', 'usercreds');
+        this.assignOption(opts, 'userCreds', 'usercreds');
+        this.assignOption(opts, 'credentials', 'usercreds');
     }
 
     var client = this;
@@ -306,23 +342,44 @@ Client.prototype.parseOptions = function(opts) {
         options.servers.forEach(function(server) {
             client.servers.push(new Server(url.parse(server)));
         });
-      // Randomize if needed
-      if (options.noRandomize !== true) {
-        shuffle(client.servers);
-      }
+        // Randomize if needed
+        if (options.noRandomize !== true) {
+            shuffle(client.servers);
+        }
 
-      // if they gave an URL we should add it if different
-      if(options.url !== undefined && client.servers.indexOf(options.url) === -1) {
-        //make url first element so it is attempted first
-        client.servers.unshift(new Server(url.parse(options.url)));
-      }
+        // if they gave an URL we should add it if different
+        if (options.url !== undefined && client.servers.indexOf(options.url) === -1) {
+            // Make url first element so it is attempted first
+            client.servers.unshift(new Server(url.parse(options.url)));
+        }
     } else {
         if (undefined === options.url) {
             options.url = DEFAULT_URI;
         }
         client.servers.push(new Server(url.parse(options.url)));
     }
+    // If we are not setup for tls, but were handed a url with a tls:// prefix
+    // then upgrade to tls.
+    if (options.tls === false) {
+        client.servers.forEach(function(server) {
+            if (server.url.protocol === 'tls' || server.url.protocol === 'tls:') {
+                options.tls = true;
+            }
+        });
+    }
 };
+
+function sanitizeUrl(host) {
+    if ((/^.*:\/\/.*/).exec(host) === null) {
+        // Does not have a scheme.
+        host = 'nats://' + host;
+    }
+    var u = url.parse(host);
+    if (u.port === null || u.port == '') {
+        host += ":" + DEFAULT_PORT;
+    }
+    return host;
+}
 
 /**
  * Create a new server.
@@ -339,7 +396,7 @@ function Server(url) {
  * @api private
  */
 Server.prototype.toString = function() {
-  return this.url.href;
+    return this.url.href;
 };
 
 /**
@@ -381,6 +438,14 @@ Client.prototype.selectServer = function() {
  * @api private
  */
 Client.prototype.checkTLSMismatch = function() {
+    // Switch over to TLS as needed on the fly.
+    if (this.info.tls_required === true ||
+        (this.options.tls !== false && this.stream.encrypted !== true)) {
+        if (undefined === this.options.tls || this.options.tls === false) {
+            this.options.tls = true;
+        }
+    }
+
     if (this.info.tls_required === true &&
         this.options.tls === false) {
         this.emit('error', new NatsError(SECURE_CONN_REQ_MSG, SECURE_CONN_REQ));
@@ -402,6 +467,110 @@ Client.prototype.checkTLSMismatch = function() {
     }
     return false;
 };
+
+/**
+ * Load a user jwt from a chained credential file.
+ *
+ * @api private
+ */
+Client.prototype.loadUserJWT = function() {
+    var contents = fs.readFileSync(this.options.usercreds);
+    var m = CREDS.exec(contents); // jwt
+    if (m === null) {
+        this.emit('error', new NatsError(NO_USER_JWT_IN_CREDS_MSG, NO_USER_JWT_IN_CREDS));
+        this.closeStream();
+        return;
+    }
+    return m[1];
+};
+
+/**
+ * Load a user nkey seed from a chained credential file
+ * and sign nonce.
+ *
+ * @api private
+ */
+Client.prototype.loadKeyAndSignNonce = function(nonce) {
+    var contents = fs.readFileSync(this.options.usercreds);
+    var re = new RegExp(CREDS, 'g');
+    re.exec(contents); // jwt
+    var m = re.exec(contents); // seed
+    if (m === null) {
+        this.emit('error', new NatsError(NO_SEED_IN_CREDS_MSG, NO_SEED_IN_CREDS));
+        this.closeStream();
+        return;
+    }
+    var sk = nkeys.fromSeed(Buffer.from(m[1]));
+    return sk.sign(nonce);
+};
+
+/**
+ * Helper that takes a user credentials file and
+ * generates the proper opts object with proper handlers
+ * filled in. e.g nats.connect(url, nats.creds("my_creds.ttx")
+ *
+ * @params {String} [filepath]
+ *
+ * @api public
+ */
+exports.creds = function(filepath) {
+    if (undefined === filepath) {
+        return undefined;
+    }
+    return {
+        usercreds: filepath
+    };
+};
+
+/**
+ * Check for Nkey mismatch.
+ *
+ * @api private
+ */
+Client.prototype.checkNkeyMismatch = function() {
+    if (undefined === this.info.nonce) {
+        return false;
+    }
+
+    // If this has been specified make sure we can open the file and parse it.
+    if (this.options.usercreds !== undefined) {
+        // Treat this as a filename.
+        // For now we will not capture an error on file not found etc.
+        var contents = fs.readFileSync(this.options.usercreds);
+        if (CREDS.exec(contents) === null) {
+            this.emit('error', new NatsError(BAD_CREDS_MSG, BAD_CREDS));
+            this.closeStream();
+            return true;
+        }
+        // We have a valid file, set up callback handlers.
+        var client = this;
+        this.options.sig = function(nonce) {
+            return client.loadKeyAndSignNonce(nonce);
+        };
+        this.options.userjwt = function() {
+            return client.loadUserJWT();
+        };
+        return false;
+    }
+
+    if (undefined === this.options.sig) {
+        this.emit('error', new NatsError(SIGNATURE_REQUIRED_MSG, SIGNATURE_REQUIRED));
+        this.closeStream();
+        return true;
+    }
+    if (typeof (this.options.sig) !== 'function') {
+        this.emit('error', new NatsError(SIGCB_NOTFUNC_MSG, SIGCB_NOTFUNC));
+        this.closeStream();
+        return true;
+    }
+    if (undefined === this.options.nkey && undefined === this.options.userjwt) {
+        this.emit('error', new NatsError(NKEY_OR_JWT_REQ_MSG, NKEY_OR_JWT_REQ));
+        this.closeStream();
+        return true;
+    }
+    return false;
+};
+
 
 /**
  * Callback for first flush/connect.
@@ -544,6 +713,20 @@ Client.prototype.sendConnect = function() {
         'pedantic': this.options.pedantic,
         'protocol': 1
     };
+    if (this.info.nonce !== undefined && this.options.sig !== undefined) {
+        var sig = this.options.sig(Buffer.from(this.info.nonce));
+        cs.sig = sig.toString('base64');
+    }
+    if (this.options.userjwt !== undefined) {
+        if (typeof (this.options.userjwt) === 'function') {
+            cs.jwt = this.options.userjwt();
+        } else {
+            cs.jwt = this.options.userjwt;
+        }
+    }
+    if (this.options.nkey !== undefined) {
+        cs.nkey = this.options.nkey;
+    }
     if (this.user !== undefined) {
         cs.user = this.user;
         cs.pass = this.pass;
@@ -554,6 +737,10 @@ Client.prototype.sendConnect = function() {
     if (this.options.name !== undefined) {
         cs.name = this.options.name;
     }
+    if (this.options.nkey !== undefined) {
+        cs.nkey = this.options.nkey;
+    }
+
     // If we enqueued requests before we received INFO from the server, or we
     // reconnected, there be other data pending, write this immediately instead
     // of adding it to the queue.
@@ -610,16 +797,18 @@ Client.prototype.createConnection = function() {
 
     // Select a server to connect to.
     this.selectServer();
-    // See #45 if we have a stream release the listeners
-    // otherwise in addition to the leak events will fire fire
+
+    // See #45 if we have a stream release the listeners otherwise in addition
+    // to the leaking of events, the old events will still fire.
     if (this.stream) {
         this.stream.removeAllListeners();
         this.stream.destroy();
     }
     // Create the stream
     this.stream = net.createConnection(this.url);
+    // this.stream = net.createConnection(this.url.port, this.url.hostname);
     // this change makes it a bit faster on Linux, slightly worse on OS X
-    // this.stream.setNoDelay(true);
+    this.stream.setNoDelay(true);
     // Setup the proper handlers.
     this.setupHandlers();
 };
@@ -647,7 +836,7 @@ Client.prototype.initState = function() {
  * @api public
  */
 Client.prototype.close = function() {
-    if(this.pingTimer) {
+    if (this.pingTimer) {
         clearTimeout(this.pingTimer);
         delete this.pingTimer;
     }
@@ -867,19 +1056,21 @@ Client.prototype.processInbound = function() {
                     client.sendCommand(PONG_RESPONSE);
                 } else if ((m = INFO.exec(buf)) !== null) {
                     client.info = JSON.parse(m[1]);
-                    // Check on TLS mismatch.
-                    if (client.checkTLSMismatch() === true) {
-                        return;
-                    }
-
                     // Always try to read the connect_urls from info
                     client.processServerUpdate();
 
                     // Process first INFO
                     if (client.infoReceived === false) {
+                        // Check on TLS mismatch.
+                        if (client.checkTLSMismatch() === true) {
+                            return;
+                        }
+                        if (client.checkNkeyMismatch() === true) {
+                            return;
+                        }
+
                         // Switch over to TLS as needed.
-                        if (client.options.tls !== false &&
-                            client.stream.encrypted !== true) {
+                        if (client.info.tls_required === true) {
                             var tlsOpts = {
                                 socket: client.stream
                             };
@@ -889,14 +1080,12 @@ Client.prototype.processInbound = function() {
                                 }
                             }
                             // if we have a stream, this is from an old connection, reap it
-                            // if (client.stream) {
-                            //     client.stream.removeAllListeners();
-                            //     client.stream.sock.close();
-                            // }
-                            // Object.assign(tlsOpts, client.options);
-                            // client.stream = tls.connect(tlsOpts, function() {
-                            //     client.flushPending();
-                            // });
+                            if (client.stream) {
+                                client.stream.removeAllListeners();
+                            }
+                            client.stream = tls.connect(tlsOpts, function() {
+                                client.flushPending();
+                            });
                             client.setupHandlers();
                         }
 
@@ -1006,50 +1195,52 @@ Client.prototype.processInbound = function() {
  * @api internal
  */
 Client.prototype.processServerUpdate = function() {
-  var client = this;
-  if (client.info.connect_urls && client.info.connect_urls.length > 0) {
-    // parse the infos
-    var tmp = {};
-    client.info.connect_urls.forEach(function(server) {
-      var u = 'nats://' + server;
-      var s = new Server(url.parse(u));
-      // implicit servers are ones added via the info connect_urls
-      s.implicit = true;
-      tmp[s.url.href] = s;
-    });
+    var client = this;
+    if (client.info.connect_urls && client.info.connect_urls.length > 0) {
+        // parse the infos
+        var tmp = {};
+        client.info.connect_urls.forEach(function(server) {
+            var u = 'nats://' + server;
+            var s = new Server(url.parse(u));
+            // implicit servers are ones added via the info connect_urls
+            s.implicit = true;
+            tmp[s.url.href] = s;
+        });
 
-    // remove implicit servers that are no longer reported
-    var toDelete = [];
-    client.servers.forEach(function(s, index) {
-      var u = s.url.href;
-      if(s.implicit && client.currentServer.url.href !== u && tmp[u] === undefined) {
-        // server was removed
-        toDelete.push(index);
-      }
-      // remove this entry from reported
-      delete tmp[u];
-    });
+        // remove implicit servers that are no longer reported
+        var toDelete = [];
+        client.servers.forEach(function(s, index) {
+            var u = s.url.href;
+            if (s.implicit && client.currentServer.url.href !== u && tmp[u] === undefined) {
+                // server was removed
+                toDelete.push(index);
+            }
+            // remove this entry from reported
+            delete tmp[u];
+        });
 
-    // perform the deletion
-    toDelete.reverse();
-    toDelete.forEach(function(index) {
-      client.servers.splice(index, 1);
-    });
+        // perform the deletion
+        toDelete.reverse();
+        toDelete.forEach(function(index) {
+            client.servers.splice(index, 1);
+        });
 
-    // remaining servers are new
-    var newURLs = [];
-    for(var k in tmp) {
-      if(tmp.hasOwnProperty(k)) {
-        client.servers.push(tmp[k]);
-        newURLs.push(k);
-      }
+        // remaining servers are new
+        var newURLs = [];
+        for (var k in tmp) {
+            if (tmp.hasOwnProperty(k)) {
+                client.servers.push(tmp[k]);
+                newURLs.push(k);
+            }
+        }
+
+        if (newURLs.length) {
+            // new reported servers useful for tests
+            client.emit('serversDiscovered', newURLs);
+            // simpler version
+            client.emit('servers', newURLs);
+        }
     }
-
-    if(newURLs.length) {
-      // new reported servers useful for tests
-      client.emit('serversDiscovered', newURLs);
-    }
-  }
 };
 
 /**
@@ -1068,6 +1259,7 @@ Client.prototype.processMsg = function() {
                 sub.timeout = null;
             }
         }
+
         // Check for auto-unsubscribe
         if (sub.max !== undefined) {
             if (sub.received === sub.max) {
@@ -1094,7 +1286,7 @@ Client.prototype.processMsg = function() {
             }
             try {
                 sub.callback(msg, this.payload.reply, this.payload.subj, this.payload.sid);
-            } catch(error) {
+            } catch (error) {
                 this.emit('error', error);
             }
         }
@@ -1304,7 +1496,7 @@ Client.prototype.unsubscribe = function(sid, opt_max) {
     // in the case of new muxRequest, it is possible they want perform
     // an unsubscribe with the returned 'sid'. Intercept that and clear
     // the request configuration. Mux requests are always negative numbers
-    if(sid < 0) {
+    if (sid < 0) {
         this.cancelMuxRequest(sid);
         return;
     }
@@ -1352,9 +1544,9 @@ Client.prototype.timeout = function(sid, timeout, expected, callback) {
     }
     var sub = null;
     // check the sid is not a mux sid - which is always negative
-    if(sid < 0) {
+    if (sid < 0) {
         var conf = this.getMuxRequestConfig(sid);
-        if(conf && conf.timeout) {
+        if (conf && conf.timeout) {
             // clear auto-set timeout
             clearTimeout(conf.timeout);
         }
@@ -1363,10 +1555,10 @@ Client.prototype.timeout = function(sid, timeout, expected, callback) {
         sub = this.subs[sid];
     }
 
-    if(sub) {
+    if (sub) {
         sub.expected = expected;
         var that = this;
-        sub.timeout = setTimeout(function () {
+        sub.timeout = setTimeout(function() {
             callback(sid);
             // if callback fails unsubscribe will leak
             that.unsubscribe(sid);
@@ -1397,7 +1589,7 @@ Client.prototype.timeout = function(sid, timeout, expected, callback) {
  * @api public
  */
 Client.prototype.request = function(subject, opt_msg, opt_options, callback) {
-    if(this.options.useOldRequestStyle) {
+    if (this.options.useOldRequestStyle) {
         return this.oldRequest(subject, opt_msg, opt_options, callback);
     }
     if (typeof opt_msg === 'function') {
@@ -1414,10 +1606,10 @@ Client.prototype.request = function(subject, opt_msg, opt_options, callback) {
     var conf = this.initMuxRequestDetails(callback, opt_options.max);
     this.publish(subject, opt_msg, conf.inbox);
 
-    if(opt_options.timeout) {
+    if (opt_options.timeout) {
         var client = this;
         conf.timeout = setTimeout(function() {
-            if(conf.callback) {
+            if (conf.callback) {
                 conf.callback(new NatsError(REQ_TIMEOUT_MSG_PREFIX + conf.id, REQ_TIMEOUT));
             }
             client.cancelMuxRequest(conf.token);
@@ -1470,7 +1662,7 @@ Client.prototype.oldRequest = function(subject, opt_msg, opt_options, callback) 
  * @api public
  */
 Client.prototype.requestOne = function(subject, opt_msg, opt_options, timeout, callback) {
-    if(this.options.useOldRequestStyle) {
+    if (this.options.useOldRequestStyle) {
         return this.oldRequestOne(subject, opt_msg, opt_options, timeout, callback);
     }
 
@@ -1511,22 +1703,23 @@ Client.prototype.extractToken = function(subject) {
  * @api private
  */
 Client.prototype.createResponseMux = function() {
-    if(!this.respmux) {
+    if (!this.respmux) {
         var client = this;
         var inbox = createInbox();
         var ginbox = inbox + ".*";
         var sid = this.subscribe(ginbox, function(msg, reply, subject) {
             var token = client.extractToken(subject);
             var conf = client.getMuxRequestConfig(token);
-            if(conf) {
-                if(conf.hasOwnProperty('expected')) {
+            if (conf) {
+                if (conf.callback) {
+                    conf.callback(msg, reply);
+                }
+                if (conf.hasOwnProperty('expected')) {
                     conf.received++;
                     if (conf.received >= conf.expected) {
                         client.cancelMuxRequest(token);
+                        client.emit('unsubscribe', sid, subject);
                     }
-                }
-                if(conf.callback) {
-                    conf.callback(msg, reply);
                 }
             }
         });
@@ -1550,8 +1743,14 @@ Client.prototype.initMuxRequestDetails = function(callback, expected) {
     var token = nuid.next();
     var inbox = ginbox + '.' + token;
 
-    var conf = {token: token, callback: callback, inbox: inbox, id: this.respmux.nextID--, received: 0};
-    if(expected > 0) {
+    var conf = {
+        token: token,
+        callback: callback,
+        inbox: inbox,
+        id: this.respmux.nextID--,
+        received: 0
+    };
+    if (expected > 0) {
         conf.expected = expected;
     }
 
@@ -1592,7 +1791,7 @@ Client.prototype.getMuxRequestConfig = function(token) {
 Client.prototype.cancelMuxRequest = function(token) {
     var conf = this.getMuxRequestConfig(token);
     if (conf) {
-        if(conf.timeout) {
+        if (conf.timeout) {
             clearTimeout(conf.timeout);
         }
         // the token could be sid, so use the one in the conf
