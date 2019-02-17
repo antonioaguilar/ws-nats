@@ -44,8 +44,10 @@
   "browser": {
     "net": "./src/net.js",
     "tls": "./src/tls.js",
-    "nuid": "./src/nuid.js"
+    "nuid": "./src/nuid.js",
+    "fs": "./src/fs.js"
   },
   "dependencies": {
+    "ts-nkeys": "^1.0.10"
   }
 }
