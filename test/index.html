@@ -33,11 +33,11 @@
       console.log('Received message from subscriber:', JSON.stringify(e, null, 0));
     });
 
-    // setInterval( ()=> {
-    //   var subject = `dashboard.${Date.now()}`;
-    //   console.log(`Publishing to subject: ${subject}`);
-    //   nc.publish(subject, JSON.stringify({ timestamp: new Date().toISOString() }, null, 0));
-    // }, 1000);
+    setInterval( ()=> {
+      var subject = `dashboard.${Date.now()}`;
+      console.log(`Publishing to subject: ${subject}`);
+      nc.publish(subject, JSON.stringify({ timestamp: new Date().toISOString() }, null, 0));
+    }, 1000);
 
   });  
 

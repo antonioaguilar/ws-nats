@@ -17,10 +17,38 @@
 'use strict';
 
 /**
- * Module Dependencies
+ * Check for crypto library
  */
+var crypto = initCrypto();
 
-var crypto = require('crypto');
+function initCrypto() {
+  var crypto;
+
+  if('crypto' in window && window.crypto.getRandomValues) {
+    crypto = window.crypto;
+  }
+  else if('msCrypto' in window && window.msCrypto.getRandomValues) {
+    crypto = window.msCrypto;
+  }
+  else {
+    crypto = {};
+    crypto.getRandomValues = function(array) {
+      for(var i=0; i < array.length; i++) {
+        array[i] = Math.floor(Math.random() * (255));
+      }
+    };
+  }
+
+  crypto.randomBytes = function(size, cb) {
+    var buf = new Uint8Array(size);
+    if (size > 0) {
+      crypto.getRandomValues(buf);
+    }
+    return buf;
+  };
+
+  return crypto;
+}
 
 /**
  * Constants

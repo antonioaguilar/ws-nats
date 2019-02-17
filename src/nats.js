@@ -19,12 +19,12 @@
 /**
  * Module Dependencies
  */
-var net    = require('./net'),
-    tls    = require('./tls'),
+var net    = require('net'),
+    tls    = require('tls'),
     url    = require('url'),
     util   = require('util'),
     events = require('events'),
-    nuid   = require('./nuid');
+    nuid   = require('nuid');
 
 /**
  * Constants
