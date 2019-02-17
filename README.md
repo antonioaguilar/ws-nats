@@ -31,18 +31,10 @@ Browser:
 </html>
 ```
 
-NodeJS:
-```javascript
-var NATS = require('ws-nats');
-
-var nats = NATS.connect({ url: 'ws://0.0.0.0:8080', json: true });
-
-nats.publish('foo', { message: 'Hello World!' });
-``` 
-
 ### Basic Example
 
 ```javascript
+// var NATS = window.NATS;
 var NATS = require('ws-nats');
 
 var nats = NATS.connect({ url: 'ws://0.0.0.0:8080', json: true });
@@ -137,11 +129,8 @@ Tested in the following browsers versions:
 * Opera 46+
 
 ### Limitations
-* Internet Explorer 9/10 are not supported because it doesn't support the [Crypto API](https://caniuse.com/#feat=getrandomvalues)
-* The UMD bundle produced by Webpack is quite large at the moment (e.g. ~ 338 KiB), please consider this when including the library in your project
-
+* Internet Explorer 9/10 are not supported because they don't implement the [Crypto API](https://caniuse.com/#feat=getrandomvalues)
 
 ### Acknowledgements
 
 This library is heavily inspired by [websocket-nats](https://github.com/isobit/websocket-nats) and re-uses the sames API methods from the original [node-nats](https://github.com/nats-io/node-nats#basic-usage) library. 
-The only difference is that `ws-nats` can run in both the browser and NodeJS (via a W3C compliant WebSocket library). 
