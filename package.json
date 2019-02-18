@@ -36,9 +36,9 @@
     "net": "./src/net.js",
     "tls": "./src/tls.js",
     "nuid": "./src/nuid.js",
-    "fs": "./src/fs.js"
+    "fs": "./src/fs.js",
+    "ts-nkeys": "./src/nkeys.js"
   },
   "dependencies": {
-    "ts-nkeys": "^1.0.10"
   }
 }

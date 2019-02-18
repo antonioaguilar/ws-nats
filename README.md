@@ -2,7 +2,7 @@
 [![npm](https://img.shields.io/npm/v/ws-nats.svg)](https://www.npmjs.com/package/ws-nats)
 [![License MIT](https://img.shields.io/npm/l/ws-nats.svg)](http://opensource.org/licenses/MIT)
 
-A browser and NodeJS websocket client library for NATS
+A browser websocket client library for NATS
 
 ### Install
 
@@ -11,8 +11,6 @@ npm install --save ws-nats
 ```
 
 ### Usage
-
-Browser:
 
 ```html
 <!DOCTYPE html>
@@ -130,6 +128,8 @@ Tested in the following browsers versions:
 
 ### Limitations
 * Internet Explorer 9/10 are not supported because they don't implement the [Crypto API](https://caniuse.com/#feat=getrandomvalues)
+* TLS connections to NATS server are not supported because we are using Websocket as transport
+* The `nkeys` public-key signature system has been disabled from the codebase to reduce bundle size (we plan to port this at a later stage)
 
 ### Acknowledgements
 
