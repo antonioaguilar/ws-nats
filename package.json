@@ -1,13 +1,11 @@
 {
   "name": "ws-nats",
-  "version": "2.0.1",
-  "description": "A browser and NodeJS websocket client library for NATS",
+  "version": "2.1.1",
+  "description": "A browser websocket client library for NATS",
   "main": "src/nats.js",
   "scripts": {
-    "rollup_build": "rimraf dist && rollup -c",
-    "rollup_dev": "rimraf dist && rollup -c -w",
-    "webpack_build": "rimraf dist && webpack --config webpack.config.js --mode=production --display-modules",
-    "webpack_dev": "rimraf dist && webpack --config webpack.config.js --mode=development --display-modules"
+    "build": "rimraf dist && webpack --config webpack.config.js --mode=production --display-modules",
+    "dev": "rimraf dist && webpack --config webpack.config.js --mode=development --display-modules"
   },
   "repository": {
     "type": "git",
@@ -31,13 +29,6 @@
   "homepage": "https://github.com/antonioaguilar/ws-nats#readme",
   "devDependencies": {
     "rimraf": "latest",
-    "rollup": "^0.63.5",
-    "rollup-plugin-commonjs": "^9.2.0",
-    "rollup-plugin-node-builtins": "^2.1.2",
-    "rollup-plugin-node-globals": "^1.4.0",
-    "rollup-plugin-node-resolve": "^3.4.0",
-    "rollup-plugin-uglify": "3.0.0",
-    "uglifyjs-webpack-plugin": "latest",
     "webpack": "latest",
     "webpack-cli": "latest"
   },
