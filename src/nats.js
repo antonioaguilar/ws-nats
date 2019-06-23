@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2018 The NATS Authors
+ * Copyright 2013-2019 The NATS Authors
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
@@ -13,13 +13,14 @@
  * limitations under the License.
  */
 
-/* jslint node: true */
+/* eslint no-sync: 0 */
+
 'use strict';
 
 /**
  * Module Dependencies
  */
-var net = require('net'),
+const net = require('net'),
     tls = require('tls'),
     url = require('url'),
     util = require('util'),
@@ -31,7 +32,7 @@ var net = require('net'),
 /**
  * Constants
  */
-var VERSION = '1.2.2',
+const VERSION = '1.3.0',
 
     DEFAULT_PORT = 4222,
     DEFAULT_PRE = 'nats://localhost:',
@@ -78,6 +79,9 @@ var VERSION = '1.2.2',
     // Errors
     BAD_AUTHENTICATION = 'BAD_AUTHENTICATION',
     BAD_AUTHENTICATION_MSG = 'User and Token can not both be provided',
+    BAD_AUTHENTICATION_TH_NOT_FUNC_MSG = 'tokenHandler must be a function returning a token',
+    BAD_AUTHENTICATION_T_AND_TH_MSG = 'token and tokenHandler cannot both be provided',
+    BAD_AUTHENTICATION_TH_FAILED_MSG_PREFIX = 'tokenHandler call failed: ',
     BAD_JSON = 'BAD_JSON',
     BAD_JSON_MSG = 'Message should be a non-circular JSON-serializable value',
     BAD_MSG = 'BAD_MSG',
@@ -90,6 +94,10 @@ var VERSION = '1.2.2',
     CLIENT_CERT_REQ_MSG = 'Server requires a client certificate.',
     CONN_CLOSED = 'CONN_CLOSED',
     CONN_CLOSED_MSG = 'Connection closed',
+    CONN_DRAINING = 'CONN_DRAINING',
+    CONN_DRAINING_MSG = 'Connection draining',
+    SUB_DRAINING = 'SUB_DRAINING',
+    SUB_DRAINING_MSG = 'Subscription draining',
     CONN_ERR = 'CONN_ERR',
     CONN_ERR_MSG_PREFIX = 'Could not connect to server: ',
     INVALID_ENCODING = 'INVALID_ENCODING',
@@ -117,6 +125,8 @@ var VERSION = '1.2.2',
     NO_USER_JWT_IN_CREDS_MSG = 'Can not locate user jwt in credentials.',
     BAD_OPTIONS = 'BAD_OPTIONS',
     BAD_OPTIONS_MSG = 'Options should be an object as second paramater.',
+    NO_ECHO_NOT_SUPPORTED = 'NO_ECHO_NOT_SUPPORTED',
+    NO_ECHO_NOT_SUPPORTED_MSG = 'echo is not supported',
 
     FLUSH_THRESHOLD = 65536;
 
@@ -151,6 +161,7 @@ exports.BAD_SUBJECT = BAD_SUBJECT;
 exports.BAD_MSG = BAD_MSG;
 exports.BAD_REPLY = BAD_REPLY;
 exports.CONN_CLOSED = CONN_CLOSED;
+exports.CONN_DRAINING = CONN_DRAINING;
 exports.BAD_JSON = BAD_JSON;
 exports.BAD_AUTHENTICATION = BAD_AUTHENTICATION;
 exports.INVALID_ENCODING = INVALID_ENCODING;
@@ -159,6 +170,7 @@ exports.NON_SECURE_CONN_REQ = NON_SECURE_CONN_REQ;
 exports.CLIENT_CERT_REQ = CLIENT_CERT_REQ;
 exports.NATS_PROTOCOL_ERR = NATS_PROTOCOL_ERR;
 exports.REQ_TIMEOUT = REQ_TIMEOUT;
+exports.SUB_DRAINING = SUB_DRAINING;
 
 
 /**
@@ -166,7 +178,7 @@ exports.REQ_TIMEOUT = REQ_TIMEOUT;
  *
  * @api public
  */
-var createInbox = exports.createInbox = function() {
+const createInbox = exports.createInbox = function() {
     return ("_INBOX." + nuid.next());
 };
 
@@ -231,9 +243,9 @@ Client.prototype.assignOption = function(opts, prop, assign) {
 };
 
 function shuffle(array) {
-    for (var i = array.length - 1; i > 0; i--) {
-        var j = Math.floor(Math.random() * (i + 1));
-        var temp = array[i];
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const temp = array[i];
         array[i] = array[j];
         array[j] = temp;
     }
@@ -247,7 +259,7 @@ function shuffle(array) {
  * @api private
  */
 Client.prototype.parseOptions = function(opts) {
-    var options = this.options = {
+    const options = this.options = {
         verbose: false,
         pedantic: false,
         reconnect: true,
@@ -258,7 +270,8 @@ Client.prototype.parseOptions = function(opts) {
         waitOnFirstConnect: false,
         pingInterval: DEFAULT_PING_INTERVAL,
         maxPingOut: DEFAULT_MAX_PING_OUT,
-        useOldRequestStyle: false
+        useOldRequestStyle: false,
+        noEcho: false
     };
 
 
@@ -278,6 +291,7 @@ Client.prototype.parseOptions = function(opts) {
         this.assignOption(opts, 'user');
         this.assignOption(opts, 'pass');
         this.assignOption(opts, 'token');
+        this.assignOption(opts, 'tokenHandler');
         this.assignOption(opts, 'password', 'pass');
         this.assignOption(opts, 'verbose');
         this.assignOption(opts, 'pedantic');
@@ -313,55 +327,63 @@ Client.prototype.parseOptions = function(opts) {
         this.assignOption(opts, 'usercreds', 'usercreds');
         this.assignOption(opts, 'userCreds', 'usercreds');
         this.assignOption(opts, 'credentials', 'usercreds');
+        this.assignOption(opts, "noEcho");
     }
 
-    var client = this;
-
     // Set user/pass as needed if in options.
-    client.user = options.user;
-    client.pass = options.pass;
+    this.user = options.user;
+    this.pass = options.pass;
 
     // Set token as needed if in options.
-    client.token = options.token;
+    this.token = options.token;
+    this.tokenHandler = options.tokenHandler;
 
     // Authentication - make sure authentication is valid.
-    if (client.user && client.token) {
+    if (this.user && this.token) {
         throw (new NatsError(BAD_AUTHENTICATION_MSG, BAD_AUTHENTICATION));
+    }
+
+    if (this.tokenHandler && typeof this.tokenHandler !== 'function') {
+        throw (new NatsError(BAD_AUTHENTICATION_TH_NOT_FUNC_MSG, BAD_AUTHENTICATION));
+    }
+
+    if (this.tokenHandler && this.token) {
+        throw (new NatsError(BAD_AUTHENTICATION_T_AND_TH_MSG, BAD_AUTHENTICATION));
     }
 
     // Encoding - make sure its valid.
     if (Buffer.isEncoding(options.encoding)) {
-        client.encoding = options.encoding;
+        this.encoding = options.encoding;
     } else {
         throw new NatsError(INVALID_ENCODING_MSG_PREFIX + options.encoding, INVALID_ENCODING);
     }
     // For cluster support
-    client.servers = [];
+    this.servers = [];
 
     if (Array.isArray(options.servers)) {
-        options.servers.forEach(function(server) {
-            client.servers.push(new Server(url.parse(server)));
+        options.servers.forEach((server) => {
+            this.servers.push(new Server(url.parse(server)));
         });
         // Randomize if needed
         if (options.noRandomize !== true) {
-            shuffle(client.servers);
+            shuffle(this.servers);
         }
 
         // if they gave an URL we should add it if different
-        if (options.url !== undefined && client.servers.indexOf(options.url) === -1) {
+        if (options.url !== undefined && this.servers.indexOf(options.url) === -1) {
             // Make url first element so it is attempted first
-            client.servers.unshift(new Server(url.parse(options.url)));
+            this.servers.unshift(new Server(url.parse(options.url)));
         }
     } else {
         if (undefined === options.url) {
             options.url = DEFAULT_URI;
         }
-        client.servers.push(new Server(url.parse(options.url)));
+        this.servers.push(new Server(url.parse(options.url)));
     }
     // If we are not setup for tls, but were handed a url with a tls:// prefix
     // then upgrade to tls.
     if (options.tls === false) {
-        client.servers.forEach(function(server) {
+        this.servers.forEach((server) => {
             if (server.url.protocol === 'tls' || server.url.protocol === 'tls:') {
                 options.tls = true;
             }
@@ -374,7 +396,7 @@ function sanitizeUrl(host) {
         // Does not have a scheme.
         host = 'nats://' + host;
     }
-    var u = url.parse(host);
+    const u = url.parse(host);
     if (u.port === null || u.port == '') {
         host += ":" + DEFAULT_PORT;
     }
@@ -408,28 +430,36 @@ Server.prototype.toString = function() {
  * @api private
  */
 Client.prototype.selectServer = function() {
-    var client = this;
-    var server = client.servers.shift();
+    const server = this.servers.shift();
 
     // Place in client context.
-    client.currentServer = server;
-    client.url = server.url;
+    this.currentServer = server;
+    this.url = server.url;
     if ('auth' in server.url && !!server.url.auth) {
-        var auth = server.url.auth.split(':');
+        const auth = server.url.auth.split(':');
         if (auth.length !== 1) {
-            if (client.options.user === undefined) {
-                client.user = auth[0];
+            if (this.options.user === undefined) {
+                this.user = auth[0];
             }
-            if (client.options.pass === undefined) {
-                client.pass = auth[1];
+            if (this.options.pass === undefined) {
+                this.pass = auth[1];
             }
         } else {
-            if (client.options.token === undefined) {
-                client.token = auth[0];
+            if (this.options.token === undefined) {
+                this.token = auth[0];
             }
         }
     }
-    client.servers.push(server);
+    this.servers.push(server);
+};
+
+Client.prototype.checkNoEchoMismatch = function() {
+    if ((this.info.proto === undefined || this.info.proto < 1) && this.options.noEcho) {
+        this.emit('error', new NatsError(NO_ECHO_NOT_SUPPORTED_MSG, NO_ECHO_NOT_SUPPORTED));
+        this.closeStream();
+        return true;
+    }
+    return false;
 };
 
 /**
@@ -474,8 +504,8 @@ Client.prototype.checkTLSMismatch = function() {
  * @api private
  */
 Client.prototype.loadUserJWT = function() {
-    var contents = fs.readFileSync(this.options.usercreds);
-    var m = CREDS.exec(contents); // jwt
+    const contents = fs.readFileSync(this.options.usercreds);
+    const m = CREDS.exec(contents); // jwt
     if (m === null) {
         this.emit('error', new NatsError(NO_USER_JWT_IN_CREDS_MSG, NO_USER_JWT_IN_CREDS));
         this.closeStream();
@@ -491,16 +521,16 @@ Client.prototype.loadUserJWT = function() {
  * @api private
  */
 Client.prototype.loadKeyAndSignNonce = function(nonce) {
-    var contents = fs.readFileSync(this.options.usercreds);
-    var re = new RegExp(CREDS, 'g');
+    const contents = fs.readFileSync(this.options.usercreds);
+    const re = new RegExp(CREDS, 'g');
     re.exec(contents); // jwt
-    var m = re.exec(contents); // seed
+    const m = re.exec(contents); // seed
     if (m === null) {
         this.emit('error', new NatsError(NO_SEED_IN_CREDS_MSG, NO_SEED_IN_CREDS));
         this.closeStream();
         return;
     }
-    var sk = nkeys.fromSeed(Buffer.from(m[1]));
+    const sk = nkeys.fromSeed(Buffer.from(m[1]));
     return sk.sign(nonce);
 };
 
@@ -536,14 +566,14 @@ Client.prototype.checkNkeyMismatch = function() {
     if (this.options.usercreds !== undefined) {
         // Treat this as a filename.
         // For now we will not capture an error on file not found etc.
-        var contents = fs.readFileSync(this.options.usercreds);
+        const contents = fs.readFileSync(this.options.usercreds);
         if (CREDS.exec(contents) === null) {
             this.emit('error', new NatsError(BAD_CREDS_MSG, BAD_CREDS));
             this.closeStream();
             return true;
         }
         // We have a valid file, set up callback handlers.
-        var client = this;
+        const client = this;
         this.options.sig = function(nonce) {
             return client.loadKeyAndSignNonce(nonce);
         };
@@ -578,8 +608,8 @@ Client.prototype.checkNkeyMismatch = function() {
  * @api private
  */
 Client.prototype.connectCB = function() {
-    var wasReconnecting = this.reconnecting;
-    var event = (wasReconnecting === true) ? 'reconnect' : 'connect';
+    const wasReconnecting = this.reconnecting;
+    const event = (wasReconnecting === true) ? 'reconnect' : 'connect';
     this.reconnecting = false;
     this.reconnects = 0;
     this.wasConnected = true;
@@ -590,7 +620,19 @@ Client.prototype.connectCB = function() {
     this.flushPending();
 };
 
+/**
+ * @api private
+ */
+Client.prototype.cancelHeartbeat = function() {
+    if (this.pingTimer) {
+        clearTimeout(this.pingTimer);
+        delete this.pingTimer;
+    }
+};
 
+/**
+ * @api private
+ */
 Client.prototype.scheduleHeartbeat = function() {
     this.pingTimer = setTimeout(function(client) {
         client.emit('pingtimer');
@@ -627,74 +669,73 @@ Client.prototype.scheduleHeartbeat = function() {
  * @api private
  */
 Client.prototype.setupHandlers = function() {
-    var client = this;
-    var stream = client.stream;
+    const stream = this.stream;
 
     if (undefined === stream) {
         return;
     }
 
-    stream.on('connect', function() {
-        if (client.pingTimer) {
-            clearTimeout(client.pingTimer);
-            delete client.pingTimer;
-        }
-        client.connected = true;
-        client.scheduleHeartbeat();
+    stream.on('connect', () => {
+        this.cancelHeartbeat();
+        this.connected = true;
+        this.scheduleHeartbeat();
     });
 
-    stream.on('close', function(hadError) {
-        client.closeStream();
-        client.emit('disconnect');
-        if (client.closed === true ||
-            client.options.reconnect === false ||
-            ((client.reconnects >= client.options.maxReconnectAttempts) && client.options.maxReconnectAttempts !== -1)) {
-            client.emit('close');
+    stream.on('close', (hadError) => {
+        this.closeStream();
+        if(stream.bytesRead > 0) {
+            this.emit('disconnect');
+        }
+        if (this.closed === true ||
+            this.options.reconnect === false ||
+            ((this.reconnects >= this.options.maxReconnectAttempts) && this.options.maxReconnectAttempts !== -1)) {
+            this.cleanupTimers();
+            this.emit('close');
         } else {
-            client.scheduleReconnect();
+            this.scheduleReconnect();
         }
     });
 
-    stream.on('error', function(exception) {
+    stream.on('error', (exception) => {
         // If we were connected just return, close event will process
-        if (client.wasConnected === true && client.currentServer.didConnect === true) {
+        if (this.wasConnected === true && this.currentServer.didConnect === true) {
             return;
         }
 
         // if the current server did not connect at all, and we in
         // general have not connected to any server, remove it from
-        // this list. Unless overidden
-        if (client.wasConnected === false && client.currentServer.didConnect === false) {
+        // this list. Unless overridden
+        if (this.wasConnected === false && this.currentServer.didConnect === false) {
             // We can override this behavior with waitOnFirstConnect, which will
             // treat it like a reconnect scenario.
-            if (client.options.waitOnFirstConnect) {
+            if (this.options.waitOnFirstConnect) {
                 // Pretend to move us into a reconnect state.
-                client.currentServer.didConnect = true;
+                this.currentServer.didConnect = true;
             } else {
-                client.servers.splice(client.servers.length - 1, 1);
+                this.servers.splice(this.servers.length - 1, 1);
             }
         }
 
         // Only bubble up error if we never had connected
         // to the server and we only have one.
-        if (client.wasConnected === false && client.servers.length === 0) {
-            client.emit('error', new NatsError(CONN_ERR_MSG_PREFIX + exception, CONN_ERR, exception));
+        if (this.wasConnected === false && this.servers.length === 0) {
+            this.emit('error', new NatsError(CONN_ERR_MSG_PREFIX + exception, CONN_ERR, exception));
         }
-        client.closeStream();
+        this.closeStream();
     });
 
-    stream.on('data', function(data) {
+    stream.on('data', (data) => {
         // If inbound exists, concat them together. We try to avoid this for split
         // messages, so this should only really happen for a split control line.
         // Long term answer is hand rolled parser and not regexp.
-        if (client.inbound) {
-            client.inbound = Buffer.concat([client.inbound, data]);
+        if (this.inbound) {
+            this.inbound = Buffer.concat([this.inbound, data]);
         } else {
-            client.inbound = data;
+            this.inbound = data;
         }
 
         // Process the inbound queue.
-        client.processInbound();
+        this.processInbound();
     });
 };
 
@@ -706,15 +747,15 @@ Client.prototype.setupHandlers = function() {
  */
 Client.prototype.sendConnect = function() {
     // Queue the connect command.
-    var cs = {
-        'lang': 'node',
-        'version': VERSION,
-        'verbose': this.options.verbose,
-        'pedantic': this.options.pedantic,
-        'protocol': 1
+    const cs = {
+        lang: 'node',
+        version: VERSION,
+        verbose: this.options.verbose,
+        pedantic: this.options.pedantic,
+        protocol: 1,
     };
     if (this.info.nonce !== undefined && this.options.sig !== undefined) {
-        var sig = this.options.sig(Buffer.from(this.info.nonce));
+        const sig = this.options.sig(Buffer.from(this.info.nonce));
         cs.sig = sig.toString('base64');
     }
     if (this.options.userjwt !== undefined) {
@@ -731,7 +772,15 @@ Client.prototype.sendConnect = function() {
         cs.user = this.user;
         cs.pass = this.pass;
     }
-    if (this.token !== undefined) {
+    if (this.tokenHandler !== undefined) {
+        let token;
+        try {
+            token = this.tokenHandler();
+        } catch (err) {
+            this.emit('error', new NatsError(BAD_AUTHENTICATION_TH_FAILED_MSG_PREFIX + err, BAD_AUTHENTICATION, err));
+        }
+        cs.auth_token = token;
+    } else if (this.token !== undefined) {
         cs.auth_token = this.token;
     }
     if (this.options.name !== undefined) {
@@ -739,6 +788,9 @@ Client.prototype.sendConnect = function() {
     }
     if (this.options.nkey !== undefined) {
         cs.nkey = this.options.nkey;
+    }
+    if (this.options.noEcho) {
+        cs.echo = false;
     }
 
     // If we enqueued requests before we received INFO from the server, or we
@@ -763,17 +815,16 @@ Client.prototype.createConnection = function() {
     // via callbacks, would have to track the client's internal connection state,
     // and may have to double buffer messages (which we are already doing) if they
     // wanted to ensure their messages reach the server.
-    var pong = [];
-    var pend = [];
-    var pSize = 0;
-    var client = this;
-    if (client.pending !== null) {
-        var pongIndex = 0;
-        client.pending.forEach(function(cmd) {
-            var cmdLen = Buffer.isBuffer(cmd) ? cmd.length : Buffer.byteLength(cmd);
-            if (cmd === PING_REQUEST && client.pongs !== null && pongIndex < client.pongs.length) {
+    const pong = [];
+    const pend = [];
+    let pSize = 0;
+    if (this.pending !== null) {
+        let pongIndex = 0;
+        this.pending.forEach((cmd) => {
+            const cmdLen = Buffer.isBuffer(cmd) ? cmd.length : Buffer.byteLength(cmd);
+            if (cmd === PING_REQUEST && this.pongs !== null && pongIndex < this.pongs.length) {
                 // filter out any useless ping requests (no pong callback, nop flush)
-                var p = client.pongs[pongIndex++];
+                const p = this.pongs[pongIndex++];
                 if (p !== undefined) {
                     pend.push(cmd);
                     pSize += cmdLen;
@@ -806,7 +857,6 @@ Client.prototype.createConnection = function() {
     }
     // Create the stream
     this.stream = net.createConnection(this.url);
-    // this.stream = net.createConnection(this.url.port, this.url.hostname);
     // this change makes it a bit faster on Linux, slightly worse on OS X
     this.stream.setNoDelay(true);
     // Setup the proper handlers.
@@ -836,10 +886,7 @@ Client.prototype.initState = function() {
  * @api public
  */
 Client.prototype.close = function() {
-    if (this.pingTimer) {
-        clearTimeout(this.pingTimer);
-        delete this.pingTimer;
-    }
+    this.cleanupTimers();
     this.closed = true;
     this.removeAllListeners();
     this.closeStream();
@@ -849,6 +896,34 @@ Client.prototype.close = function() {
     this.pongs = null;
     this.pending = null;
     this.pSize = 0;
+};
+
+/**
+ * Cancels all the timers, ping, subs, requests.
+ * Should only be called on a close.
+ * @api private
+ */
+Client.prototype.cleanupTimers = function() {
+    this.cancelHeartbeat();
+
+    if(this.respmux && this.respmux.requestMap) {
+        for (const p in this.respmux.requestMap) {
+            if (this.respmux.requestMap.hasOwnProperty(p)) {
+                this.cancelMuxRequest(p);
+            }
+        }
+    }
+    if(this.subs) {
+        for (const p in this.subs) {
+            if (this.subs.hasOwnProperty(p)) {
+                const sub = this.subs[p];
+                if(sub.timeout) {
+                    clearTimeout(sub.timeout);
+                    delete sub.timeout;
+                }
+            }
+        }
+    }
 };
 
 /**
@@ -884,19 +959,18 @@ Client.prototype.flushPending = function() {
         return;
     }
 
-    var client = this;
-    var write = function(data) {
-        client.pending = [];
-        client.pSize = 0;
-        return client.stream.write(data);
+    const write = (data) => {
+        this.pending = [];
+        this.pSize = 0;
+        return this.stream.write(data);
     };
     if (!this.pBufs) {
         // All strings, fastest for now.
         return write(this.pending.join(EMPTY));
     } else {
         // We have some or all Buffers. Figure out if we can optimize.
-        var allBufs = true;
-        for (var i = 0; i < this.pending.length; i++) {
+        let allBufs = true;
+        for (let i = 0; i < this.pending.length; i++) {
             if (!Buffer.isBuffer(this.pending[i])) {
                 allBufs = false;
                 break;
@@ -907,11 +981,11 @@ Client.prototype.flushPending = function() {
             return write(Buffer.concat(this.pending, this.pSize));
         } else {
             // We have a mix, so write each one individually.
-            var pending = this.pending;
+            const pending = this.pending;
             this.pending = [];
             this.pSize = 0;
-            var result = true;
-            for (i = 0; i < pending.length; i++) {
+            let result = true;
+            for (let i = 0; i < pending.length; i++) {
                 result = this.stream.write(pending[i]) && result;
             }
             return result;
@@ -926,10 +1000,10 @@ Client.prototype.flushPending = function() {
  * @api private
  */
 Client.prototype.stripPendingSubs = function() {
-    var pending = this.pending;
+    const pending = this.pending;
     this.pending = [];
     this.pSize = 0;
-    for (var i = 0; i < pending.length; i++) {
+    for (let i = 0; i < pending.length; i++) {
         if (!SUBRE.test(pending[i])) {
             // Re-queue the command.
             this.sendCommand(pending[i]);
@@ -961,7 +1035,7 @@ Client.prototype.sendCommand = function(cmd) {
     if (this.connected === true) {
         // First one let's setup flush..
         if (this.pending.length === 1) {
-            var self = this;
+            const self = this;
             setImmediate(function() {
                 self.flushPending();
             });
@@ -978,11 +1052,11 @@ Client.prototype.sendCommand = function(cmd) {
  * @api private
  */
 Client.prototype.sendSubscriptions = function() {
-    var protos = "";
-    for (var sid in this.subs) {
+    let protos = "";
+    for (const sid in this.subs) {
         if (this.subs.hasOwnProperty(sid)) {
-            var sub = this.subs[sid];
-            var proto;
+            const sub = this.subs[sid];
+            let proto;
             if (sub.qgroup) {
                 proto = [SUB, sub.subject, sub.qgroup, sid + CR_LF];
             } else {
@@ -1002,106 +1076,106 @@ Client.prototype.sendSubscriptions = function() {
  * @api private
  */
 Client.prototype.processInbound = function() {
-    var client = this;
-
     // Hold any regex matches.
-    var m;
+    let m;
 
     // For optional yield
-    var start;
+    let start;
 
-    if (!client.stream) {
+    if (!this.stream) {
         // if we are here, the stream was reaped and errors raised
         // if we continue.
         return;
     }
     // unpause if needed.
     // FIXME(dlc) client.stream.isPaused() causes 0.10 to fail
-    client.stream.resume();
+    this.stream.resume();
 
     /* jshint -W083 */
 
-    if (client.options.yieldTime !== undefined) {
+    if (this.options.yieldTime !== undefined) {
         start = Date.now();
     }
 
-    while (!client.closed && client.inbound && client.inbound.length > 0) {
-        switch (client.pstate) {
-
-            case AWAITING_CONTROL:
+    while (!this.closed && this.inbound && this.inbound.length > 0) {
+        switch (this.pstate) {
+            case AWAITING_CONTROL: {
                 // Regex only works on strings, so convert once to be more efficient.
                 // Long term answer is a hand rolled parser, not regex.
-                var buf = client.inbound.toString('binary', 0, MAX_CONTROL_LINE_SIZE);
+                const buf = this.inbound.toString('binary', 0, MAX_CONTROL_LINE_SIZE);
                 if ((m = MSG.exec(buf)) !== null) {
-                    client.payload = {
+                    this.payload = {
                         subj: m[1],
                         sid: parseInt(m[2], 10),
                         reply: m[4],
                         size: parseInt(m[5], 10)
                     };
-                    client.payload.psize = client.payload.size + CR_LF_LEN;
-                    client.pstate = AWAITING_MSG_PAYLOAD;
+                    this.payload.psize = this.payload.size + CR_LF_LEN;
+                    this.pstate = AWAITING_MSG_PAYLOAD;
                 } else if ((m = OK.exec(buf)) !== null) {
                     // Ignore for now..
                 } else if ((m = ERR.exec(buf)) !== null) {
-                    client.processErr(m[1]);
+                    this.processErr(m[1]);
                     return;
                 } else if ((m = PONG.exec(buf)) !== null) {
-                    client.pout = 0;
-                    var cb = client.pongs && client.pongs.shift();
+                    this.pout = 0;
+                    const cb = this.pongs && this.pongs.shift();
                     if (cb) {
                         cb();
                     } // FIXME: Should we check for exceptions?
                 } else if ((m = PING.exec(buf)) !== null) {
-                    client.sendCommand(PONG_RESPONSE);
+                    this.sendCommand(PONG_RESPONSE);
                 } else if ((m = INFO.exec(buf)) !== null) {
-                    client.info = JSON.parse(m[1]);
+                    this.info = JSON.parse(m[1]);
                     // Always try to read the connect_urls from info
-                    client.processServerUpdate();
+                    this.processServerUpdate();
 
                     // Process first INFO
-                    if (client.infoReceived === false) {
+                    if (this.infoReceived === false) {
                         // Check on TLS mismatch.
-                        if (client.checkTLSMismatch() === true) {
+                        if (this.checkTLSMismatch() === true) {
                             return;
                         }
-                        if (client.checkNkeyMismatch() === true) {
+                        if (this.checkNoEchoMismatch() === true) {
+                            return;
+                        }
+                        if (this.checkNkeyMismatch() === true) {
                             return;
                         }
 
                         // Switch over to TLS as needed.
-                        if (client.info.tls_required === true) {
-                            var tlsOpts = {
-                                socket: client.stream
+                        if (this.info.tls_required === true) {
+                            const tlsOpts = {
+                                socket: this.stream
                             };
-                            if ('object' === typeof client.options.tls) {
-                                for (var key in client.options.tls) {
-                                    tlsOpts[key] = client.options.tls[key];
+                            if ('object' === typeof this.options.tls) {
+                                for (const key in this.options.tls) {
+                                    tlsOpts[key] = this.options.tls[key];
                                 }
                             }
                             // if we have a stream, this is from an old connection, reap it
-                            if (client.stream) {
-                                client.stream.removeAllListeners();
+                            if (this.stream) {
+                                this.stream.removeAllListeners();
                             }
-                            client.stream = tls.connect(tlsOpts, function() {
-                                client.flushPending();
+                            this.stream = tls.connect(tlsOpts,  () => {
+                                this.flushPending();
                             });
-                            client.setupHandlers();
+                            this.setupHandlers();
                         }
 
                         // Send the connect message and subscriptions immediately
-                        client.sendConnect();
-                        client.sendSubscriptions();
+                        this.sendConnect();
+                        this.sendSubscriptions();
 
-                        client.pongs.unshift(function() {
-                            client.connectCB();
+                        this.pongs.unshift(() => {
+                            this.connectCB();
                         });
-                        client.stream.write(PING_REQUEST);
+                        this.stream.write(PING_REQUEST);
 
                         // Mark as received
-                        client.infoReceived = true;
-                        client.stripPendingSubs();
-                        client.flushPending();
+                        this.infoReceived = true;
+                        this.stripPendingSubs();
+                        this.flushPending();
                     }
                 } else {
                     // FIXME, check line length for something weird.
@@ -1109,81 +1183,83 @@ Client.prototype.processInbound = function() {
                     return;
                 }
                 break;
+            }
 
-            case AWAITING_MSG_PAYLOAD:
+            case AWAITING_MSG_PAYLOAD: {
 
                 // If we do not have the complete message, hold onto the chunks
                 // and assemble when we have all we need. This optimizes for
                 // when we parse a large buffer down to a small number of bytes,
                 // then we receive a large chunk. This avoids a big copy with a
                 // simple concat above.
-                if (client.inbound.length < client.payload.psize) {
-                    if (undefined === client.payload.chunks) {
-                        client.payload.chunks = [];
+                if (this.inbound.length < this.payload.psize) {
+                    if (undefined === this.payload.chunks) {
+                        this.payload.chunks = [];
                     }
-                    client.payload.chunks.push(client.inbound);
-                    client.payload.psize -= client.inbound.length;
-                    client.inbound = null;
+                    this.payload.chunks.push(this.inbound);
+                    this.payload.psize -= this.inbound.length;
+                    this.inbound = null;
                     return;
                 }
 
                 // If we are here we have the complete message.
                 // Check to see if we have existing chunks
-                if (client.payload.chunks) {
+                if (this.payload.chunks) {
 
-                    client.payload.chunks.push(client.inbound.slice(0, client.payload.psize));
+                    this.payload.chunks.push(this.inbound.slice(0, this.payload.psize));
                     // don't append trailing control characters
-                    var mbuf = Buffer.concat(client.payload.chunks, client.payload.size);
+                    const mbuf = Buffer.concat(this.payload.chunks, this.payload.size);
 
-                    if (client.options.preserveBuffers) {
-                        client.payload.msg = mbuf;
+                    if (this.options.preserveBuffers) {
+                        this.payload.msg = mbuf;
                     } else {
-                        client.payload.msg = mbuf.toString(client.encoding);
+                        this.payload.msg = mbuf.toString(this.encoding);
                     }
 
                 } else {
 
-                    if (client.options.preserveBuffers) {
-                        client.payload.msg = client.inbound.slice(0, client.payload.size);
+                    if (this.options.preserveBuffers) {
+                        this.payload.msg = this.inbound.slice(0, this.payload.size);
                     } else {
-                        client.payload.msg = client.inbound.toString(client.encoding, 0, client.payload.size);
+                        this.payload.msg = this.inbound.toString(this.encoding, 0, this.payload.size);
                     }
 
                 }
 
                 // Eat the size of the inbound that represents the message.
-                if (client.inbound.length === client.payload.psize) {
-                    client.inbound = null;
+                if (this.inbound.length === this.payload.psize) {
+                    this.inbound = null;
                 } else {
-                    client.inbound = client.inbound.slice(client.payload.psize);
+                    this.inbound = this.inbound.slice(this.payload.psize);
                 }
 
                 // process the message
-                client.processMsg();
+                this.processMsg();
 
                 // Reset
-                client.pstate = AWAITING_CONTROL;
-                client.payload = null;
+                this.pstate = AWAITING_CONTROL;
+                this.payload = null;
 
                 // Check to see if we have an option to yield for other events after yieldTime.
                 if (start !== undefined) {
-                    if ((Date.now() - start) > client.options.yieldTime) {
-                        client.stream.pause();
-                        setImmediate(client.processInbound.bind(this));
+                    if ((Date.now() - start) > this.options.yieldTime) {
+                        this.stream.pause();
+                        setImmediate(this.processInbound.bind(this));
                         return;
                     }
                 }
                 break;
+            }
         }
 
         // This is applicable for a regex match to eat the bytes we used from a control line.
         if (m && !this.closed) {
             // Chop inbound
-            var psize = m[0].length;
-            if (psize >= client.inbound.length) {
-                client.inbound = null;
+            const psize = m[0].length;
+            if (psize >= this.inbound.length) {
+                this.inbound = null;
             } else {
-                client.inbound = client.inbound.slice(psize);
+                this.inbound = this.inbound.slice(psize);
             }
         }
         m = null;
@@ -1195,23 +1271,22 @@ Client.prototype.processInbound = function() {
  * @api internal
  */
 Client.prototype.processServerUpdate = function() {
-    var client = this;
-    if (client.info.connect_urls && client.info.connect_urls.length > 0) {
+    if (this.info.connect_urls && this.info.connect_urls.length > 0) {
         // parse the infos
-        var tmp = {};
-        client.info.connect_urls.forEach(function(server) {
-            var u = 'nats://' + server;
-            var s = new Server(url.parse(u));
+        const tmp = {};
+        this.info.connect_urls.forEach((server) => {
+            const u = 'nats://' + server;
+            const s = new Server(url.parse(u));
             // implicit servers are ones added via the info connect_urls
             s.implicit = true;
             tmp[s.url.href] = s;
         });
 
         // remove implicit servers that are no longer reported
-        var toDelete = [];
-        client.servers.forEach(function(s, index) {
-            var u = s.url.href;
-            if (s.implicit && client.currentServer.url.href !== u && tmp[u] === undefined) {
+        const toDelete = [];
+        this.servers.forEach((s, index) => {
+            const u = s.url.href;
+            if (s.implicit && this.currentServer.url.href !== u && tmp[u] === undefined) {
                 // server was removed
                 toDelete.push(index);
             }
@@ -1221,24 +1296,24 @@ Client.prototype.processServerUpdate = function() {
 
         // perform the deletion
         toDelete.reverse();
-        toDelete.forEach(function(index) {
-            client.servers.splice(index, 1);
+        toDelete.forEach((index) => {
+            this.servers.splice(index, 1);
         });
 
         // remaining servers are new
-        var newURLs = [];
-        for (var k in tmp) {
+        const newURLs = [];
+        for (const k in tmp) {
             if (tmp.hasOwnProperty(k)) {
-                client.servers.push(tmp[k]);
+                this.servers.push(tmp[k]);
                 newURLs.push(k);
             }
         }
 
         if (newURLs.length) {
             // new reported servers useful for tests
-            client.emit('serversDiscovered', newURLs);
+            this.emit('serversDiscovered', newURLs);
             // simpler version
-            client.emit('servers', newURLs);
+            this.emit('servers', newURLs);
         }
     }
 };
@@ -1249,7 +1324,7 @@ Client.prototype.processServerUpdate = function() {
  * @api private
  */
 Client.prototype.processMsg = function() {
-    var sub = this.subs[this.payload.sid];
+    const sub = this.subs[this.payload.sid];
     if (sub !== undefined) {
         sub.received += 1;
         // Check for a timeout, and cancel if received >= expected
@@ -1272,7 +1347,7 @@ Client.prototype.processMsg = function() {
         }
 
         if (sub.callback) {
-            var msg = this.payload.msg;
+            let msg = this.payload.msg;
             if (this.options.json) {
                 try {
                     if (this.options.preserveBuffers) {
@@ -1301,7 +1376,7 @@ Client.prototype.processMsg = function() {
 Client.prototype.processErr = function(s) {
     // current NATS clients, will raise an error and close on any errors
     // except stale connection and permission errors
-    var m = s ? s.toLowerCase() : '';
+    const m = s ? s.toLowerCase() : '';
     if (m.indexOf(STALE_CONNECTION_ERR) !== -1) {
         // closeStream() triggers a reconnect if allowed
         this.closeStream();
@@ -1351,6 +1426,83 @@ Client.prototype.flush = function(opt_callback) {
 };
 
 /**
+ * Drains all subscriptions. If an opt_callback is provided, the callback
+ * is called if there's an error with an error argument.
+ *
+ * Note that after calling drain, it is impossible to create new subscriptions
+ * or any requests. As soon as all messages for the draining subscriptions are
+ * processed, it is also impossible to publish new messages.
+ *
+ * A drained connection is closed when the opt_callback is called without arguments.
+ * @param opt_callback
+ */
+Client.prototype.drain = function(opt_callback) {
+    if(this.handledClosedOrDraining(opt_callback)) {
+        return;
+    }
+    this.draining = true;
+    const subs = [];
+    const drains = [];
+    for (const sid in this.subs) {
+        if (this.subs.hasOwnProperty(sid)) {
+            const sub = this.subs[sid];
+            sub.sid = sid;
+            subs.push(sub);
+        }
+    }
+
+    subs.forEach((sub) => {
+        this.drainSubscription(sub.sid, () => {
+            drains.push(sub);
+            if(drains.length === subs.length) {
+                this.noMorePublishing = true;
+                this.flush(() => {
+                    this.close();
+                    if (typeof opt_callback === 'function') {
+                        opt_callback();
+                    }
+                });
+            }
+        });
+    });
+
+    // no subscriptions
+    if(subs.length === 0) {
+        this.noMorePublishing = true;
+        this.close();
+        if (typeof opt_callback === 'function') {
+            opt_callback();
+        }
+    }
+};
+
+/**
+ * Returns true if the client is closed or draining, caller should
+ * return as error was generated.
+ * @private
+ * @param opt_callback
+ * @returns {boolean}
+ */
+Client.prototype.handledClosedOrDraining = function(opt_callback) {
+    if (this.closed) {
+        if (typeof opt_callback === 'function') {
+            opt_callback(new NatsError(CONN_CLOSED_MSG, CONN_CLOSED));
+        } else {
+            throw (new NatsError(CONN_CLOSED_MSG, CONN_CLOSED));
+        }
+        return true;
+    }
+    if (this.draining) {
+        if (typeof opt_callback === 'function') {
+            opt_callback(new NatsError(CONN_DRAINING_MSG, CONN_DRAINING));
+        } else {
+            throw (new NatsError(CONN_DRAINING_MSG, CONN_DRAINING));
+        }
+        return true;
+    }
+};
+
+/**
  * Publish a message to the given subject, with optional reply and callback.
  *
  * @param {String} subject
@@ -1364,6 +1516,15 @@ Client.prototype.publish = function(subject, msg, opt_reply, opt_callback) {
     if (typeof subject === 'function') {
         opt_callback = subject;
         subject = undefined;
+    }
+
+    if (this.noMorePublishing) {
+        if (typeof opt_callback === 'function') {
+            opt_callback(new NatsError(CONN_DRAINING_MSG, CONN_DRAINING));
+        } else {
+            this.emit('error', new NatsError(CONN_DRAINING_MSG, CONN_DRAINING));
+        }
+        return;
     }
 
     if (!this.options.json) {
@@ -1399,7 +1560,7 @@ Client.prototype.publish = function(subject, msg, opt_reply, opt_callback) {
     }
 
     // Hold PUB SUB [REPLY]
-    var psub;
+    let psub;
     if (opt_reply === undefined) {
         psub = 'PUB ' + subject + SPC;
     } else {
@@ -1408,7 +1569,7 @@ Client.prototype.publish = function(subject, msg, opt_reply, opt_callback) {
 
     // Need to treat sending buffers different.
     if (!Buffer.isBuffer(msg)) {
-        var str = msg;
+        let str = msg;
         if (this.options.json) {
             try {
                 str = JSON.stringify(msg);
@@ -1418,8 +1579,8 @@ Client.prototype.publish = function(subject, msg, opt_reply, opt_callback) {
         }
         this.sendCommand(psub + Buffer.byteLength(str) + CR_LF + str + CR_LF);
     } else {
-        var b = Buffer.allocUnsafe(psub.length + msg.length + (2 * CR_LF_LEN) + msg.length.toString().length);
-        var len = b.write(psub + msg.length + CR_LF);
+        const b = Buffer.allocUnsafe(psub.length + msg.length + (2 * CR_LF_LEN) + msg.length.toString().length);
+        const len = b.write(psub + msg.length + CR_LF);
         msg.copy(b, len);
         b.write(CR_LF, len + msg.length);
         this.sendCommand(b);
@@ -1443,10 +1604,7 @@ Client.prototype.publish = function(subject, msg, opt_reply, opt_callback) {
  * @api public
  */
 Client.prototype.subscribe = function(subject, opts, callback) {
-    if (this.closed) {
-        throw (new NatsError(CONN_CLOSED_MSG, CONN_CLOSED));
-    }
-    var qgroup, max;
+    let qgroup, max;
     if (typeof opts === 'function') {
         callback = opts;
         opts = undefined;
@@ -1455,6 +1613,11 @@ Client.prototype.subscribe = function(subject, opts, callback) {
         qgroup = opts.queue;
         max = opts.max;
     }
+
+    if(this.handledClosedOrDraining(callback)) {
+        return 0;
+    }
+
     this.ssid += 1;
     this.subs[this.ssid] = {
         'subject': subject,
@@ -1462,7 +1625,7 @@ Client.prototype.subscribe = function(subject, opts, callback) {
         'received': 0
     };
 
-    var proto;
+    let proto;
     if (typeof qgroup === 'string') {
         this.subs[this.ssid].qgroup = qgroup;
         proto = [SUB, subject, qgroup, this.ssid + CR_LF];
@@ -1501,7 +1664,7 @@ Client.prototype.unsubscribe = function(sid, opt_max) {
         return;
     }
 
-    var proto;
+    let proto;
     if (opt_max) {
         proto = [UNSUB, sid, opt_max + CR_LF];
     } else {
@@ -1509,7 +1672,7 @@ Client.prototype.unsubscribe = function(sid, opt_max) {
     }
     this.sendCommand(proto.join(SPC));
 
-    var sub = this.subs[sid];
+    const sub = this.subs[sid];
     if (sub === undefined) {
         return;
     }
@@ -1523,6 +1686,50 @@ Client.prototype.unsubscribe = function(sid, opt_max) {
         delete this.subs[sid];
         this.emit('unsubscribe', sid, sub.subject);
     }
+};
+
+
+/**
+ * Draining a subscription is similar to unsubscribe but inbound pending messages are
+ * not discarded. When the last in-flight message is processed, the subscription handler
+ * is removed.
+ * @param sid
+ * @param opt_callback
+ */
+Client.prototype.drainSubscription = function(sid, opt_callback) {
+    if(this.handledClosedOrDraining(opt_callback)) {
+        return;
+    }
+
+    const sub = this.subs[sid];
+    if (sub === undefined) {
+        if (typeof opt_callback === 'function') {
+            opt_callback();
+        }
+        return;
+    }
+    if(sub.draining) {
+        if (typeof opt_callback === 'function') {
+            opt_callback(new NatsError(SUB_DRAINING_MSG, SUB_DRAINING));
+        } else {
+            throw (new NatsError(SUB_DRAINING_MSG, SUB_DRAINING));
+        }
+        return;
+    }
+    sub.draining = true;
+    const proto = [UNSUB, sid + CR_LF];
+    this.sendCommand(proto.join(SPC));
+    this.flush(() => {
+        if(sub.timeout) {
+            clearTimeout(sub.timeout);
+            sub.timeout = null;
+        }
+        delete this.subs[sid];
+        this.emit('unsubscribe', sid, sub.subject);
+        if (typeof opt_callback === 'function') {
+            opt_callback();
+        }
+    });
 };
 
 /**
@@ -1542,10 +1749,10 @@ Client.prototype.timeout = function(sid, timeout, expected, callback) {
     if (!sid) {
         return;
     }
-    var sub = null;
+    let sub = null;
     // check the sid is not a mux sid - which is always negative
     if (sid < 0) {
-        var conf = this.getMuxRequestConfig(sid);
+        const conf = this.getMuxRequestConfig(sid);
         if (conf && conf.timeout) {
             // clear auto-set timeout
             clearTimeout(conf.timeout);
@@ -1557,11 +1764,10 @@ Client.prototype.timeout = function(sid, timeout, expected, callback) {
 
     if (sub) {
         sub.expected = expected;
-        var that = this;
-        sub.timeout = setTimeout(function() {
+        sub.timeout = setTimeout(() => {
             callback(sid);
             // if callback fails unsubscribe will leak
-            that.unsubscribe(sid);
+            this.unsubscribe(sid);
         }, timeout);
     }
 };
@@ -1602,17 +1808,20 @@ Client.prototype.request = function(subject, opt_msg, opt_options, callback) {
         opt_options = null;
     }
 
+    if(this.handledClosedOrDraining(callback)) {
+        return 0;
+    }
+
     opt_options = opt_options || {};
-    var conf = this.initMuxRequestDetails(callback, opt_options.max);
+    const conf = this.initMuxRequestDetails(callback, opt_options.max);
     this.publish(subject, opt_msg, conf.inbox);
 
     if (opt_options.timeout) {
-        var client = this;
-        conf.timeout = setTimeout(function() {
+        conf.timeout = setTimeout(() => {
             if (conf.callback) {
                 conf.callback(new NatsError(REQ_TIMEOUT_MSG_PREFIX + conf.id, REQ_TIMEOUT));
             }
-            client.cancelMuxRequest(conf.token);
+            this.cancelMuxRequest(conf.token);
         }, opt_options.timeout);
     }
 
@@ -1634,8 +1843,14 @@ Client.prototype.oldRequest = function(subject, opt_msg, opt_options, callback) 
         callback = opt_options;
         opt_options = null;
     }
-    var inbox = createInbox();
-    var s = this.subscribe(inbox, opt_options, function(msg, reply) {
+
+    if (this.draining) {
+        callback(new NatsError(CONN_DRAINING_MSG, CONN_DRAINING));
+        return;
+    }
+
+    const inbox = this.createInbox();
+    const s = this.subscribe(inbox, opt_options, function(msg, reply) {
         callback(msg, reply);
     });
     this.publish(subject, opt_msg, inbox);
@@ -1704,12 +1919,11 @@ Client.prototype.extractToken = function(subject) {
  */
 Client.prototype.createResponseMux = function() {
     if (!this.respmux) {
-        var client = this;
-        var inbox = createInbox();
-        var ginbox = inbox + ".*";
-        var sid = this.subscribe(ginbox, function(msg, reply, subject) {
-            var token = client.extractToken(subject);
-            var conf = client.getMuxRequestConfig(token);
+        const inbox = this.createInbox();
+        const ginbox = inbox + ".*";
+        const sid = this.subscribe(ginbox, (msg, reply, subject) => {
+            const token = this.extractToken(subject);
+            const conf = this.getMuxRequestConfig(token);
             if (conf) {
                 if (conf.callback) {
                     conf.callback(msg, reply);
@@ -1717,8 +1931,8 @@ Client.prototype.createResponseMux = function() {
                 if (conf.hasOwnProperty('expected')) {
                     conf.received++;
                     if (conf.received >= conf.expected) {
-                        client.cancelMuxRequest(token);
-                        client.emit('unsubscribe', sid, subject);
+                        this.cancelMuxRequest(token);
+                        this.emit('unsubscribe', sid, subject);
                     }
                 }
             }
@@ -1739,11 +1953,11 @@ Client.prototype.createResponseMux = function() {
  * @api private
  */
 Client.prototype.initMuxRequestDetails = function(callback, expected) {
-    var ginbox = this.createResponseMux();
-    var token = nuid.next();
-    var inbox = ginbox + '.' + token;
+    const ginbox = this.createResponseMux();
+    const token = nuid.next();
+    const inbox = ginbox + '.' + token;
 
-    var conf = {
+    const conf = {
         token: token,
         callback: callback,
         inbox: inbox,
@@ -1766,10 +1980,10 @@ Client.prototype.initMuxRequestDetails = function(callback, expected) {
 Client.prototype.getMuxRequestConfig = function(token) {
     // if the token is a number, we have a fake sid, find the request
     if (typeof token === 'number') {
-        var entry = null;
-        for (var p in this.respmux.requestMap) {
+        let entry = null;
+        for (const p in this.respmux.requestMap) {
             if (this.respmux.requestMap.hasOwnProperty(p)) {
-                var v = this.respmux.requestMap[p];
+                const v = this.respmux.requestMap[p];
                 if (v.id === token) {
                     entry = v;
                     break;
@@ -1789,7 +2003,7 @@ Client.prototype.getMuxRequestConfig = function(token) {
  * @api private
  */
 Client.prototype.cancelMuxRequest = function(token) {
-    var conf = this.getMuxRequestConfig(token);
+    const conf = this.getMuxRequestConfig(token);
     if (conf) {
         if (conf.timeout) {
             clearTimeout(conf.timeout);
@@ -1821,7 +2035,7 @@ Client.prototype.oldRequestOne = function(subject, opt_msg, opt_options, timeout
     opt_options = opt_options || {};
     opt_options.max = 1;
 
-    var sid = this.request(subject, opt_msg, opt_options, callback);
+    const sid = this.request(subject, opt_msg, opt_options, callback);
     this.timeout(sid, timeout, 1, function() {
         callback(new NatsError(REQ_TIMEOUT_MSG_PREFIX + sid, REQ_TIMEOUT));
     });
@@ -1860,22 +2074,21 @@ Client.prototype.reconnect = function() {
  * @api private
  */
 Client.prototype.scheduleReconnect = function() {
-    var client = this;
     // Just return if no more servers
-    if (client.servers.length === 0) {
+    if (this.servers.length === 0) {
         return;
     }
     // Don't set reconnecting state if we are just trying
     // for the first time.
-    if (client.wasConnected === true) {
-        client.reconnecting = true;
+    if (this.wasConnected === true) {
+        this.reconnecting = true;
     }
     // Only stall if we have connected before.
-    var wait = 0;
-    if (client.servers[0].didConnect === true) {
+    let wait = 0;
+    if (this.servers[0].didConnect === true) {
         wait = this.options.reconnectTimeWait;
     }
-    setTimeout(function() {
-        client.reconnect();
+    setTimeout(() => {
+        this.reconnect();
     }, wait);
 };

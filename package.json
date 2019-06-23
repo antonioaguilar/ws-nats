@@ -1,6 +1,6 @@
 {
   "name": "ws-nats",
-  "version": "2.1.1",
+  "version": "2.2.0",
   "description": "A browser websocket client library for NATS",
   "main": "src/nats.js",
   "scripts": {
@@ -40,5 +40,7 @@
     "ts-nkeys": "./src/nkeys.js"
   },
   "dependencies": {
+    "sockjs-client": "latest",
+    "uuid": "latest"
   }
 }
