@@ -19,10 +19,8 @@ npm install --save ws-nats
 <body>
   <script src="ws-nats.umd.js"></script>
   <script>
-    var NATS = window.NATS;
-    
     var nats = NATS.connect({ url: 'ws://0.0.0.0:8080', json: true });
-    
+
     nats.publish('foo', { message: 'Hello World!' });
   </script>
 </body>
@@ -127,9 +125,9 @@ Tested in the following browsers versions:
 * Opera 46+
 
 ### Limitations
-* Internet Explorer 9/10 are not supported because they don't implement the [Crypto API](https://caniuse.com/#feat=getrandomvalues)
 * TLS connections to NATS server are not supported because we are using Websocket as transport
 * The `nkeys` public-key signature system has been disabled from the codebase to reduce bundle size (we plan to port this at a later stage)
+* The size of the library bundle has increased because we are using [sockjs-client](https://github.com/sockjs/sockjs-client), we will remove this dependency in future releases.
 
 ### Acknowledgements
 
