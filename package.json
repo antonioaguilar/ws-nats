@@ -1,6 +1,6 @@
 {
   "name": "ws-nats",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "description": "A browser websocket client library for NATS",
   "main": "src/nats.js",
   "scripts": {
