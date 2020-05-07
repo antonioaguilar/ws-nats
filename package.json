@@ -28,9 +28,9 @@
   },
   "homepage": "https://github.com/antonioaguilar/ws-nats#readme",
   "devDependencies": {
-    "rimraf": "latest",
-    "webpack": "latest",
-    "webpack-cli": "latest"
+    "rimraf": "^3.0.2",
+    "webpack": "^4.43.0",
+    "webpack-cli": "^3.3.11"
   },
   "browser": {
     "net": "./src/net.js",
@@ -40,6 +40,6 @@
     "ts-nkeys": "./src/nkeys.js"
   },
   "dependencies": {
-    "sockjs-client": "latest"
+    "sockjs-client": "^1.4.0"
   }
 }
