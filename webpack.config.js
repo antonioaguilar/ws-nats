@@ -7,7 +7,7 @@ var browserConfig = {
   target: 'web',
 
   output: {
-    filename: 'ws-nats.umd.js',
+    filename: 'ws-nats.js',
     library: 'NATS',
     libraryTarget: 'umd',
     path: __dirname + '/dist',
