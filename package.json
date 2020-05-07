@@ -40,7 +40,6 @@
     "ts-nkeys": "./src/nkeys.js"
   },
   "dependencies": {
-    "sockjs-client": "latest",
-    "uuid": "latest"
+    "sockjs-client": "latest"
   }
 }
